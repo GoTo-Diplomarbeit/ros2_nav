@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="3">
+    <name>go2_nav</name>
+    <version>0.0.1</version>
+    <description>Go2 mapping and navigation</description>
+    <maintainer email="peter.promok07@htl-salzburg.ac.at">Peter Promok</maintainer>
+    <maintainer email="kilian.schneider07@htl-salzburg.ac.at">Kilian Schneider</maintainer>
+    <maintainer email="micah.labendia07@htl-salzburg.ac.at">Micah Labendia</maintainer>
+    <maintainer email="alex.pticek@htl-salzburg.ac.at">Alex Pticek</maintainer>
+    <license>Apache-2.0</license>
+
+    <depend>rclpy</depend>
+    <depend>geometry_msgs</depend>
+
+    <export>
+        <build_type>ament_python</build_type>
+    </export>
+</package>
