@@ -1,0 +1,87 @@
+name: Run Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout go2_nav
+        uses: actions/checkout@v4
+        with:
+          path: go2_ws/src/go2_nav
+
+      - name: Set up locale
+        run: |
+          sudo apt update
+          sudo apt install -y locales
+          sudo locale-gen en_US en_US.UTF-8
+          sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+
+      - name: Add ROS 2 apt repo and install Jazzy
+        run: |
+          sudo apt install -y software-properties-common curl gnupg lsb-release
+          sudo add-apt-repository universe -y
+          sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+          sudo apt update
+          sudo apt install -y ros-jazzy-desktop ros-dev-tools
+
+      - name: Add Gazebo (OSRF) apt repo and install Harmonic
+        run: |
+          sudo curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
+          sudo apt update
+          sudo apt install -y gz-harmonic
+
+      - name: Install bridge + repo-specific dependencies
+        run: |
+          sudo apt install -y \
+            ros-jazzy-ros-gz \
+            ros-jazzy-ros2-control \
+            ros-jazzy-ros2-controllers \
+            ros-jazzy-xacro \
+            ros-jazzy-robot-localization \
+            ros-jazzy-velodyne \
+            ros-jazzy-velodyne-description \
+            python3-pip python3-venv python3-rosdep
+
+      - name: Clone Go2 CHAMP package
+        run: |
+          cd go2_ws/src
+          git clone https://github.com/khaledgabr77/unitree_go2_ros2
+
+      - name: rosdep install
+        run: |
+          sudo rosdep init 2>/dev/null || true
+          rosdep update
+          cd go2_ws
+          rosdep install --from-paths src --ignore-src -r -y
+
+      - name: Build workspace
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          cd go2_ws
+          colcon build --symlink-install
+
+      - name: Run tests and generate summary
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          source go2_ws/install/setup.bash
+          cd go2_ws/src/go2_nav
+          pip install pytest
+          pytest test/ --tb=short
+
+      - name: Post summary to PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('go2_ws/src/go2_nav/test_summary.md', 'utf8');
+            if
