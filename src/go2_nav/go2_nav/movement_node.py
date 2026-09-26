@@ -38,6 +38,7 @@ class MovementNode:
             self._movement_command_publisher = self.movement_node.create_publisher(Twist, "/cmd_vel", 10)
 
         else:
+            # TODO: Implement translation layer
             raise NotImplementedError("Functions for translating to real robot not yet implemented!")
 
     def destroy(self) -> None:
@@ -52,12 +53,12 @@ class MovementNode:
         Returns: None
 
         """
-        # If not using the simulator -> Throw
-        if not self._use_sim:
-            # TODO: Implement translation layer
-            raise ValueError("You can only use this function when using the simulator!")
+        if self._use_sim:
+            self._movement_command_publisher.publish(movement_command)
 
-        self._movement_command_publisher.publish(movement_command)
+        else:
+            # TODO: Implement translation layer
+            raise NotImplementedError("Functions for translating to real robot not yet implemented!")
 
 
 # Main function - Called when executing file
