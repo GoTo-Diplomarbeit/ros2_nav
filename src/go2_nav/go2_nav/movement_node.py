@@ -2,8 +2,8 @@ import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
 
-from go2_nav import node_runner
-from go2_nav.node_wrapper import NodeWrapper
+from go2_nav.node_utils import node_runner
+from go2_nav.node_utils.node_wrapper import NodeWrapper
 
 
 class MovementNode(NodeWrapper):

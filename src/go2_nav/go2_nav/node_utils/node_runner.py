@@ -2,7 +2,7 @@ from typing import Callable
 
 import rclpy
 
-from go2_nav.node_wrapper import NodeWrapper
+from go2_nav.node_utils.node_wrapper import NodeWrapper
 
 
 def run_node(node_wrapper_factory: Callable[[], NodeWrapper]) -> None:
