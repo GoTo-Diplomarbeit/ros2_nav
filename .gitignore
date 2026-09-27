@@ -1,0 +1,11 @@
+# Colcon build directories
+/build/
+/install/
+/log/
+
+# Idea folder
+.idea/*
+!.idea/codeStyles/
+!.idea/dictionaries/
+!.idea/vcs.xml
+!.idea/modules.xml

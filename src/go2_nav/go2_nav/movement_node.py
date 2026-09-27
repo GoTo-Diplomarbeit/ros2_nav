@@ -1,14 +1,16 @@
 import rclpy
 from geometry_msgs.msg import Twist
+from rclpy.node import Node
+
+from go2_nav import node_runner
+from go2_nav.node_wrapper import NodeWrapper
 
 
-class MovementNode:
+class MovementNode(NodeWrapper):
     """
     Bridge between planner output and the actual movement target.
     Subscribes to /planner_cmd_vel; forwards to /cmd_vel for simulator use or translates into Sport Mode SDK calls for the real robot.
     """
-
-    # -- Class functions
 
     def __init__(self, use_sim: bool = True, timer_period_sec: float | int = 0.02) -> None:
         """
@@ -28,7 +30,16 @@ class MovementNode:
         # Setup all channels
         self._setup_channels()
 
-    def _setup_channels(self):
+    # --
+    # -- Private class functions
+    # --
+
+    def _setup_channels(self) -> None:
+        """
+        Sets up the subscription and publisher channels for the movement node.
+        Returns: None
+
+        """
         self._planner_subscription = self.movement_node.create_subscription(Twist,
                                                                             "/planner_cmd_vel",
                                                                             self._publish_movement_command, 10)
@@ -40,12 +51,6 @@ class MovementNode:
         else:
             # TODO: Implement translation layer
             raise NotImplementedError("Functions for translating to real robot not yet implemented!")
-
-    def destroy(self) -> None:
-        # Destroy the movement node
-        self.movement_node.destroy_node()
-
-    # -- Movement commands
 
     def _publish_movement_command(self, movement_command: Twist) -> None:
         """
@@ -60,19 +65,33 @@ class MovementNode:
             # TODO: Implement translation layer
             raise NotImplementedError("Functions for translating to real robot not yet implemented!")
 
+    # --
+    # -- Public class functions
+    # --
+
+    @property
+    def node(self) -> Node:
+        """
+        Function to return the actual movement node.
+        Returns: The movement node.
+
+        """
+        return self.movement_node
+
+    def destroy_node(self) -> None:
+        """
+        Destroys the movement node.
+        Returns: None
+
+        """
+        self.movement_node.destroy_node()
+
 
 # Main function - Called when executing file
-if __name__ == '__main__':
-    # Initializes rclpy
-    rclpy.init()
-    # Create a movement node
-    movement_node = MovementNode()
+def main():
+    # Run the movement node
+    node_runner.run_node(MovementNode(use_sim=True))
 
-    try:
-        # Spin up the movement node indefinitely
-        rclpy.spin(movement_node.movement_node)
-    finally:
-        # Destroy the movement node when finished
-        movement_node.destroy()
-        # Shutdown rclpy
-        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

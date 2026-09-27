@@ -37,7 +37,7 @@ def movement_setup(rclpy_context):
     # Pass the values to the tests
     yield movement_node, test_node, planner_publisher, received_movement_commands, executor
 
-    movement_node.destroy()
+    movement_node.destroy_node()
     test_node.destroy_node()
 
 
