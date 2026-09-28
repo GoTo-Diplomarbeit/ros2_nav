@@ -9,14 +9,12 @@
       <excludeFolder url="file://$MODULE_DIR$/install" />
       <excludeFolder url="file://$MODULE_DIR$/log" />
     </content>
-    <orderEntry type="jdk" jdkName="WSL (Ubuntu-24.04): (/home/gazebo/venvs/go2/bin/python3)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="~/venvs/go2" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
-  <component name="PackageRequirementsSettings" />
   <component name="PyDocumentationSettings">
     <option name="format" value="GOOGLE" />
   </component>
-  <component name="ReSTService" />
   <component name="TestRunnerService">
     <option name="PROJECT_TEST_RUNNER" value="py.test" />
   </component>
