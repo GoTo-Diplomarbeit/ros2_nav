@@ -12,17 +12,14 @@ class MovementNode(NodeWrapper):
     Subscribes to /planner_cmd_vel; forwards to /cmd_vel for simulator use or translates into Sport Mode SDK calls for the real robot.
     """
 
-    def __init__(self, use_sim: bool = True, timer_period_sec: float | int = 0.02) -> None:
+    def __init__(self, use_sim: bool = True) -> None:
         """
         Initialize the movement node and starts the movement timer.
         Args:
             use_sim (bool, optional): Whether to use simulator or not.
-            timer_period_sec (float | int): How often the timer publishes the velocity command in seconds.
         """
         # Sets the flag if using sim or not
         self._use_sim = use_sim
-        # Sets the timer period in seconds
-        self._timer_period_sec = timer_period_sec
 
         # Movement Node for the whole Movement class
         self.movement_node = rclpy.create_node("movement")
