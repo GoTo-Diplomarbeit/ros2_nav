@@ -6,11 +6,12 @@
 #   cd ros2_nav
 #   ./setup.sh
 #
-# The clone itself is the ROS 2 workspace (the folder that contains src/). The script
-# installs ROS 2 + Gazebo, adds the Go2 CHAMP package to src/, builds the workspace,
-# builds CycloneDDS into ~/cyclonedds/install (needed by the Unitree SDK),
-# creates the PyCharm virtualenv (~/venvs/go2) with the ROS 2 environment baked in,
-# and installs the Unitree SDK. It never clones the private project repository.
+# The clone itself is the ROS 2 workspace (the folder that contains src/). The Go2 CHAMP
+# package is cloned and built in a SEPARATE workspace, ~/go2_ws, outside your repository;
+# your workspace is built on top of it. The script also installs ROS 2 + Gazebo, creates
+# the PyCharm virtualenv (~/venvs/go2) with the ROS 2 environment baked in, and installs
+# the Unitree SDK. It never clones the private project repository and never writes
+# third-party code into your repository.
 #
 # Run as your normal user, NOT with sudo (the script calls sudo where needed).
 # Safe to re-run: every step skips work that is already done.
@@ -22,9 +23,8 @@ set -eo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 GO2_CHAMP_REPOSITORY_URL="https://github.com/Humanoiderdepp/unitree_go2_ros2"
+CHAMP_WORKSPACE_DIRECTORY="$HOME/go2_ws"
 UNITREE_SDK_REPOSITORY_URL="https://github.com/unitreerobotics/unitree_sdk2_python.git"
-CYCLONEDDS_REPOSITORY_URL="https://github.com/eclipse-cyclonedds/cyclonedds"
-CYCLONEDDS_BRANCH="releases/0.10.x"
 
 SCRIPT_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The workspace is the folder that contains src/: this script's folder, or its parent.
@@ -39,8 +39,6 @@ else
 fi
 VENV_DIRECTORY="$HOME/venvs/go2"
 UNITREE_SDK_DIRECTORY="$HOME/unitree_sdk2_python"
-CYCLONEDDS_SOURCE_DIRECTORY="$HOME/cyclonedds"
-CYCLONEDDS_INSTALL_DIRECTORY="$CYCLONEDDS_SOURCE_DIRECTORY/install"
 ROS_SETUP_FILE="/opt/ros/jazzy/setup.bash"
 WORKSPACE_SETUP_FILE="$WORKSPACE_DIRECTORY/install/setup.bash"
 VENV_BIN="$VENV_DIRECTORY/bin"
@@ -60,8 +58,7 @@ append_line_once() {
 # ---------------------------------------------------------------------------
 echo "### 1. Base system prep ###"
 sudo apt update
-sudo apt install -y locales software-properties-common curl gnupg lsb-release git \
-  python3-pip python3-venv cmake build-essential
+sudo apt install -y locales software-properties-common curl gnupg lsb-release git python3-pip python3-venv
 sudo locale-gen en_US en_US.UTF-8
 sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 export LANG=en_US.UTF-8
@@ -87,8 +84,7 @@ sudo apt install -y \
   ros-jazzy-xacro \
   ros-jazzy-robot-localization \
   ros-jazzy-velodyne \
-  ros-jazzy-velodyne-description \
-  ros-jazzy-cyclonedds
+  ros-jazzy-velodyne-description
 
 echo "### 5. Source ROS 2 for this and future shells ###"
 append_line_once "$HOME/.bashrc" "source $ROS_SETUP_FILE"
@@ -99,20 +95,24 @@ sudo apt install -y python3-rosdep
 sudo rosdep init 2>/dev/null || true
 rosdep update
 
-echo "### 7. Go2 CHAMP package ###"
-mkdir -p "$WORKSPACE_DIRECTORY/src"
-if [ ! -d "$WORKSPACE_DIRECTORY/src/unitree_go2_ros2" ]; then
-  git clone "$GO2_CHAMP_REPOSITORY_URL" "$WORKSPACE_DIRECTORY/src/unitree_go2_ros2"
+echo "### 7. Go2 CHAMP package: its own workspace, outside your repository ###"
+mkdir -p "$CHAMP_WORKSPACE_DIRECTORY/src"
+if [ ! -d "$CHAMP_WORKSPACE_DIRECTORY/src/unitree_go2_ros2" ]; then
+  git clone "$GO2_CHAMP_REPOSITORY_URL" "$CHAMP_WORKSPACE_DIRECTORY/src/unitree_go2_ros2"
 fi
+cd "$CHAMP_WORKSPACE_DIRECTORY"
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source "$CHAMP_WORKSPACE_DIRECTORY/install/setup.bash"
 
-echo "### 8. Resolve remaining dependencies and build ###"
+echo "### 8. Your workspace, built on top of the CHAMP workspace ###"
 cd "$WORKSPACE_DIRECTORY"
 rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install
+append_line_once "$HOME/.bashrc" "source $CHAMP_WORKSPACE_DIRECTORY/install/setup.bash"
 append_line_once "$HOME/.bashrc" "source $WORKSPACE_SETUP_FILE"
 source "$WORKSPACE_SETUP_FILE"
 
-# ---------------------------------------------------------------------------
 echo "### 9. PyCharm virtualenv carrying the ROS 2 environment ###"
 # PyCharm never sources setup.bash, so the venv's interpreter is a small wrapper
 # that loads the ROS 2 environment and then hands off to the real interpreter,
@@ -229,41 +229,19 @@ if ! env -i HOME="$HOME" "$VENV_BIN/python" -c "import sys, rclpy; assert sys.pr
 fi
 
 # ---------------------------------------------------------------------------
-echo "### 10. CycloneDDS C library (needed to build the Unitree SDK) ###"
-# The Python package cyclonedds==0.10.2 has no wheel for Python 3.12, so pip builds it
-# from source. That build needs the CycloneDDS C library, and it only looks in
-# <CYCLONEDDS_HOME>/lib. ROS keeps its copy in lib/x86_64-linux-gnu, where the build
-# cannot find it. So we build our own copy into ~/cyclonedds/install (ROS stays untouched).
-if ! find "$CYCLONEDDS_INSTALL_DIRECTORY" -name 'libddsc.so*' 2>/dev/null | grep -q .; then
-  if [ ! -d "$CYCLONEDDS_SOURCE_DIRECTORY/.git" ]; then
-    git clone --depth 1 --branch "$CYCLONEDDS_BRANCH" "$CYCLONEDDS_REPOSITORY_URL" "$CYCLONEDDS_SOURCE_DIRECTORY"
-  fi
-  mkdir -p "$CYCLONEDDS_SOURCE_DIRECTORY/build" "$CYCLONEDDS_INSTALL_DIRECTORY"
-  cd "$CYCLONEDDS_SOURCE_DIRECTORY/build"
-  cmake .. -DCMAKE_INSTALL_PREFIX="$CYCLONEDDS_INSTALL_DIRECTORY"
-  cmake --build . --target install
-  cd "$WORKSPACE_DIRECTORY"
-fi
-if ! find "$CYCLONEDDS_INSTALL_DIRECTORY" -name 'libddsc.so*' 2>/dev/null | grep -q .; then
-  echo "ERROR: CycloneDDS was not installed into $CYCLONEDDS_INSTALL_DIRECTORY." >&2
-  exit 1
-fi
-export CYCLONEDDS_HOME="$CYCLONEDDS_INSTALL_DIRECTORY"
-export CMAKE_PREFIX_PATH="$CYCLONEDDS_INSTALL_DIRECTORY${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
-
-echo "### 11. Unitree SDK inside that virtualenv ###"
+echo "### 10. Unitree SDK inside that virtualenv ###"
 if [ ! -d "$UNITREE_SDK_DIRECTORY" ]; then
   git clone "$UNITREE_SDK_REPOSITORY_URL" "$UNITREE_SDK_DIRECTORY"
 fi
 # Keep NumPy below 2: ROS 2 Jazzy's compiled packages are built against NumPy 1.x.
 "$VENV_BIN/python" -m pip install "numpy<2" "opencv-python<4.12"
-# Regular (non-editable) install so PyCharm can resolve it. CYCLONEDDS_HOME (set above)
-# lets pip build cyclonedds against the library from step 10.
+# Regular (non-editable) install so PyCharm can resolve it. ROS is sourced above,
+# which lets pip build cyclonedds against the CycloneDDS that ROS 2 ships.
 "$VENV_BIN/python" -m pip install "$UNITREE_SDK_DIRECTORY"
 
-echo "### 12. Verification with a clean environment ###"
+echo "### 11. Verification with a clean environment ###"
 env -i HOME="$HOME" "$VENV_BIN/python" -c \
-  "import numpy, rclpy, cyclonedds, unitree_sdk2py; print('OK - numpy', numpy.__version__)"
+  "import numpy, rclpy, unitree_sdk2py; print('OK - numpy', numpy.__version__)"
 
 echo
 echo "Done. Open a new terminal. In PyCharm select the interpreter DIRECTORY:"
