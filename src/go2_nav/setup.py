@@ -19,9 +19,9 @@ setup(
     license='Apache-2.0',
     entry_points={
         'console_scripts': [
-            'movement_node = go2_nav.movement_node:main',
-            'vision_node = go2_nav.vision_node:main',
-            'planner_node = go2_nav.planner_node:main',
+            'movement_node = go2_nav.movement.movement_node:main',
+            'vision_node = go2_nav.vision.vision_node:main',
+            'planner_node = go2_nav.planner.planner_node:main',
         ],
     },
 )
