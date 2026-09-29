@@ -42,7 +42,7 @@ class MovementNode(NodeWrapper):
             _movement_command_publisher = self.node.create_publisher(Twist, "/cmd_vel", 10)
 
             # Create the required backend
-            self.movement_backend = GazeboBackend(_movement_command_publisher)
+            self.movement_backend = GazeboBackend(_movement_command_publisher, self.movement_node)
 
         else:
             # The required network interface
