@@ -6,6 +6,9 @@ class VisionNode(NodeWrapper):
     def __init__(self):
         super().__init__("vision")
 
+    def _setup_channels(self):
+        pass
+
 
 # Main function - Called when executing file
 def main():

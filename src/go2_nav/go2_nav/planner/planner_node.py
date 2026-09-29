@@ -6,6 +6,9 @@ class PlannerNode(NodeWrapper):
     def __init__(self):
         super().__init__("planner")
 
+    def _setup_channels(self):
+        pass
+
 
 # Main function - Called when executing file
 def main():

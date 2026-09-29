@@ -17,31 +17,27 @@ class MovementNode(NodeWrapper):
         Args:
             movement_backend_type (MovementBackendType): Whether to use simulator or real robot.
         """
+
         # Movement Node for the whole Movement class
-        super().__init__("movement")
-
-        # The selected movement backend type
-        self.movement_backend_type = movement_backend_type
-
-        # Setup all channels
-        self._setup_channels()
+        super().__init__("movement", lambda: self._setup_channels(movement_backend_type))
 
     # --
     # -- Private class functions
     # --
 
-    def _setup_channels(self) -> None:
+    def _setup_channels(self, movement_backend_type: MovementBackendType) -> None:
         """
         Sets up the subscription and publisher channels for the movement node.
         Returns: None
 
         """
+        # The selected movement backend type
         self._planner_subscription = self.node.create_subscription(Twist,
                                                                             "/planner_cmd_vel",
                                                                             self._publish_movement_command, 10)
 
         # User chose simulator -> Build simulator Node
-        if self.movement_backend_type == MovementBackendType.GAZEBO:
+        if movement_backend_type == MovementBackendType.GAZEBO:
             # Movement command publisher - Used for publishing movement Twist commands
             _movement_command_publisher = self.node.create_publisher(Twist, "/cmd_vel", 10)
 
