@@ -2,7 +2,8 @@ import pytest
 import rclpy
 from geometry_msgs.msg import Twist
 
-from go2_nav.movement_node import MovementNode
+from go2_nav.movement.movement_backend import MovementBackendType
+from go2_nav.movement.movement_node import MovementNode
 
 
 # -- Setup code
@@ -20,7 +21,7 @@ def rclpy_context():
 @pytest.fixture
 def movement_setup(rclpy_context):
     # Create the movementNode to test
-    movement_node = MovementNode(use_sim=True)
+    movement_node = MovementNode(MovementBackendType.GAZEBO)
     # Create a testNode to simulate the planner and sim/robot
     test_node = rclpy.create_node("test_helper")
 
