@@ -1,6 +1,4 @@
-import rclpy
 from geometry_msgs.msg import Twist
-from rclpy.node import Node
 
 from go2_nav.movement.movement_backend import MovementBackendType, GazeboBackend, Go2Backend, NetworkInterface
 from go2_nav.node_utils import node_runner
@@ -19,11 +17,11 @@ class MovementNode(NodeWrapper):
         Args:
             movement_backend_type (MovementBackendType): Whether to use simulator or real robot.
         """
-        # Sets the flag if using sim or not
-        self.movement_backend_type = movement_backend_type
-
         # Movement Node for the whole Movement class
-        self.movement_node = rclpy.create_node("movement")
+        super().__init__("movement")
+
+        # The selected movement backend type
+        self.movement_backend_type = movement_backend_type
 
         # Setup all channels
         self._setup_channels()
@@ -38,14 +36,14 @@ class MovementNode(NodeWrapper):
         Returns: None
 
         """
-        self._planner_subscription = self.movement_node.create_subscription(Twist,
+        self._planner_subscription = self.node.create_subscription(Twist,
                                                                             "/planner_cmd_vel",
                                                                             self._publish_movement_command, 10)
 
         # User chose simulator -> Build simulator Node
         if self.movement_backend_type == MovementBackendType.GAZEBO:
             # Movement command publisher - Used for publishing movement Twist commands
-            _movement_command_publisher = self.movement_node.create_publisher(Twist, "/cmd_vel", 10)
+            _movement_command_publisher = self.node.create_publisher(Twist, "/cmd_vel", 10)
 
             # Create the required backend
             self.movement_backend = GazeboBackend(_movement_command_publisher)
@@ -65,27 +63,6 @@ class MovementNode(NodeWrapper):
         """
         # Send the movement command to the backend
         self.movement_backend.send(movement_command)
-
-    # --
-    # -- Public class functions
-    # --
-
-    @property
-    def node(self) -> Node:
-        """
-        Function to return the actual movement node.
-        Returns: The movement node.
-
-        """
-        return self.movement_node
-
-    def destroy_node(self) -> None:
-        """
-        Destroys the movement node.
-        Returns: None
-
-        """
-        self.movement_node.destroy_node()
 
 
 # Main function - Called when executing file
