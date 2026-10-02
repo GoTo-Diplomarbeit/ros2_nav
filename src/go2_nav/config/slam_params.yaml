@@ -1,0 +1,18 @@
+slam_toolbox:
+  ros__parameters:
+    use_sim_time: true
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_footprint
+    scan_topic: /scan
+    mode: mapping
+    resolution: 0.05
+    max_laser_range: 8.0
+    minimum_travel_distance: 0.2
+    minimum_travel_heading: 0.2
+    transform_timeout: 0.5
+    distance_variance_penalty: 1.0
+    angle_variance_penalty: 2.0
+    do_loop_closing: true
+    min_pass_through: 3
+    occupancy_threshold: 0.2

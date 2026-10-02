@@ -1,3 +1,5 @@
+from glob import glob
+
 from setuptools import find_packages, setup
 
 package_name = 'go2_nav'
@@ -11,6 +13,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', ['launch/bringup.launch.py']),
         ('share/' + package_name + '/launch', ['launch/navigation.launch.py']),
+        ('share/go2_nav/config', glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
