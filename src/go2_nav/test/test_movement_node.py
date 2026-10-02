@@ -32,7 +32,7 @@ def movement_setup(rclpy_context):
     test_node.create_subscription(Twist, "/cmd_vel", received_movement_commands.append, 10)
 
     executor = rclpy.executors.SingleThreadedExecutor()
-    executor.add_node(movement_node.movement_node)
+    executor.add_node(movement_node.node)
     executor.add_node(test_node)
 
     # Pass the values to the tests
