@@ -72,4 +72,15 @@ def generate_launch_description():
             name='camera',
             output='screen',
         ),
+        Node(
+            package='image_transport',
+            executable='republish',
+            name='image_republisher',
+            arguments=['raw', 'compressed'],
+            remappings=[
+                ('in', '/rgb_image'),
+                ('out/compressed', '/rgb_image/compressed'),
+            ],
+            output='screen',
+        ),
     ])
