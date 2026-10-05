@@ -66,4 +66,10 @@ def generate_launch_description():
             name='planner',
             output='screen',
         ),
+        Node(
+            package='go2_nav',
+            executable='camera_node',
+            name='camera',
+            output='screen',
+        ),
     ])
