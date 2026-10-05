@@ -4,6 +4,7 @@ from go2_nav.movement.movement_backend import MovementBackendType, GazeboBackend
 from go2_nav.node_utils import node_runner
 from go2_nav.node_utils.node_wrapper import NodeWrapper
 
+from typing import Optional
 
 class MovementNode(NodeWrapper):
     """
@@ -21,9 +22,33 @@ class MovementNode(NodeWrapper):
         # Movement Node for the whole Movement class
         super().__init__("movement", lambda: self._setup_channels(movement_backend_type))
 
+        # Variable for saving newest incoming Twist command
+        self._last_command: Optional[Twist] = None
+
+        # Creates a Timer which is called every 0.05s
+        self._timer = self.node.create_timer(0.05, self._on_timer)
+
+
     # --
     # -- Private class functions
     # --
+
+    def _on_timer(self) -> None:
+
+        """
+        Method which is called every 0.05s
+        """
+
+        if self._last_command is None:
+            return
+
+        yaw = self.movement_backend.get_yaw()
+
+        if yaw is not None:
+            self.node.get_logger().info(f"YAW: {yaw:.3f}")
+
+        self.movement_backend.send(self._last_command)
+
 
     def _setup_channels(self, movement_backend_type: MovementBackendType) -> None:
         """
@@ -42,7 +67,7 @@ class MovementNode(NodeWrapper):
             _movement_command_publisher = self.node.create_publisher(Twist, "/cmd_vel", 10)
 
             # Create the required backend
-            self.movement_backend = GazeboBackend(_movement_command_publisher, self.movement_node)
+            self.movement_backend = GazeboBackend(_movement_command_publisher, self.node)
 
         else:
             # The required network interface
@@ -58,7 +83,7 @@ class MovementNode(NodeWrapper):
 
         """
         # Send the movement command to the backend
-        self.movement_backend.send(movement_command)
+        self._last_command = movement_command
 
 
 # Main function - Called when executing file
