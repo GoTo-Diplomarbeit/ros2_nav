@@ -1,3 +1,7 @@
+"""
+Movement Node
+"""
+
 from geometry_msgs.msg import Twist
 
 from go2_nav.movement.movement_backend import MovementBackendType, GazeboBackend, Go2Backend, NetworkInterface
@@ -61,8 +65,10 @@ class MovementNode(NodeWrapper):
         self.movement_backend.send(movement_command)
 
 
-# Main function - Called when executing file
 def main():
+    """
+    Main function - Called when executing file
+    """
     _required_backend = MovementBackendType.GAZEBO
 
     # Run the movement node
