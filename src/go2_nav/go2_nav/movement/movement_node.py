@@ -5,6 +5,8 @@ from go2_nav.node_utils import node_runner
 from go2_nav.node_utils.node_wrapper import NodeWrapper
 
 from typing import Optional
+import copy
+import math
 
 class MovementNode(NodeWrapper):
     """
@@ -25,6 +27,10 @@ class MovementNode(NodeWrapper):
         # Variable for saving newest incoming Twist command
         self._last_command: Optional[Twist] = None
 
+        self._target_yaw: Optional[float] = None
+
+        self._kp: float = 0.5
+
         # Creates a Timer which is called every 0.05s
         self._timer = self.node.create_timer(0.05, self._on_timer)
 
@@ -42,12 +48,21 @@ class MovementNode(NodeWrapper):
         if self._last_command is None:
             return
 
+        command_to_send = copy.deepcopy(self._last_command)
+
         yaw = self.movement_backend.get_yaw()
 
         if yaw is not None:
             self.node.get_logger().info(f"YAW: {yaw:.3f}")
 
-        self.movement_backend.send(self._last_command)
+        if self._target_yaw is not None:
+            if yaw is not None:
+                error_yaw = self._target_yaw - yaw
+                true_error = math.atan2(math.sin(error_yaw), math.cos(error_yaw))
+                command_to_send.angular.z += true_error * self._kp
+
+
+        self.movement_backend.send(command_to_send)
 
 
     def _setup_channels(self, movement_backend_type: MovementBackendType) -> None:
@@ -82,6 +97,13 @@ class MovementNode(NodeWrapper):
         Returns: None
 
         """
+
+        # Compares the new Twist command to the old one
+        if self._last_command != movement_command:
+            # Calls the current yaw values and saves them
+            yaw = self.movement_backend.get_yaw()
+            self._target_yaw = yaw
+
         # Send the movement command to the backend
         self._last_command = movement_command
 

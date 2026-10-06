@@ -92,7 +92,7 @@ class ImuReaderGazebo:
 
     def get_yaw(self) -> Optional[float]:
         return self._yaw
-        # Returns the position
+        # Returns the angular values
 
 class GazeboBackend(MovementBackend):
     """
