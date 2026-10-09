@@ -12,6 +12,9 @@ class CameraHost:
         self._camera_node = camera_node
 
     async def generate_frames(self) -> AsyncGenerator[bytes, None]:
+        """
+        Generate a new frame from the camera of the simulator every 30 ms
+        """
         while True:
             jpeg_bytes = self._camera_node.latest_jpeg_bytes
             if jpeg_bytes:
