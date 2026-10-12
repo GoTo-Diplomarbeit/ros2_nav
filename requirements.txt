@@ -1,0 +1,17 @@
+# Python dependencies that come from pip (setup.sh installs these into ~/venvs/go2).
+#
+# NOT listed here on purpose: rclpy, geometry_msgs, nav_msgs, sensor_msgs, ...
+# They ship with ROS 2 Jazzy (apt: ros-jazzy-desktop) and are only importable after
+# sourcing /opt/ros/jazzy/setup.bash. Install the venv through setup.sh so it carries
+# that environment.
+
+# ROS 2 Jazzy's compiled packages are built against NumPy 1.x
+numpy<2
+opencv-python<4.12
+
+# Real-robot backend (Go2Backend). Imported lazily, so the simulator does not need it.
+# Building cyclonedds needs the CycloneDDS that ROS 2 ships: source ROS before installing.
+unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git
+
+# Tests (src/go2_nav/test)
+pytest
