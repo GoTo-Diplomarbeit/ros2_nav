@@ -11,9 +11,21 @@ from go2_nav.node_utils.node_wrapper import NodeWrapper
 from go2_nav.vision.image_recognition import ImageRecognition
 
 
+# TODO: only take picture when person is in a specific box
+# TODO: change timer logic
+
 class VisionNode(NodeWrapper):
     def __init__(self):
         super().__init__("vision", self._setup_channels)
+
+    def print_log(self, log, msg_type):
+        if msg_type == "warn":
+            self.node.get_logger().warn(log)
+        elif msg_type == "info":
+            self.node.get_logger().info(log)
+        elif msg_type == "error":
+            self.node.get_logger().error(log)
+
 
     def _setup_channels(self):
         self._person_recognition = ImageRecognition(
@@ -51,15 +63,15 @@ class VisionNode(NodeWrapper):
         )
         self._result_pub = self.node.create_publisher(String, "/vision/picture_result", 10)
 
-    #
+    # this starts the photo mode
     def _on_trigger(self, _msg: Empty) -> None:
         if self._state != "idle":
-            self.node.get_logger().warn("Capture already in progress, ignoring trigger")
+            self.print_log("Capture already in progress, ignoring trigger", "warn")
             return
         self._state = "countdown"
         self._countdown_end = time.monotonic() + self._countdown_s
         self._last_logged_second = None
-        self.node.get_logger().info(f"Taking picture in {self._countdown_s:.0f} s")
+        self.print_log(f"Taking picture in {self._countdown_s:.0f} s", "info")
 
     def _image_callback(self, image: Image) -> None:
         # Drop frames while inference is still running
@@ -68,10 +80,18 @@ class VisionNode(NodeWrapper):
         self._busy = True
         try:
             # get people who are in frame and draw boxes around them
-            # TODO
             faces = self._face_recognition.get_results(image)
+
+            # merge boxes from faces and people together
             people = self._person_recognition.get_results(
-                self._person_recognition.bridge.cv2_to_imgmsg(self._face_recognition.annotated, encoding="bgr8"))
+                self._person_recognition.bridge.cv2_to_imgmsg(
+                    self._face_recognition.annotated, encoding="bgr8"
+                )
+            )
+
+            # Publish image with boxes drawn
+            # self._face_recognition.publish_results(image)
+            self._person_recognition.publish_results(image)
 
             # --- Capture state machine ---
             now = time.monotonic()
@@ -82,30 +102,32 @@ class VisionNode(NodeWrapper):
                     second = int(remaining) + 1
                     if second != self._last_logged_second:
                         self._last_logged_second = second
-                        self.node.get_logger().info(f"{second}...")
+                        self.print_log(f"{second}...", "info")
                 else:
                     self._state = "waiting_for_person"
                     self._wait_end = now + self._person_timeout_s
 
+            # CAPTURE
             if self._state == "waiting_for_person":
-                if people:
-                    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-                    path = os.path.join(self._save_dir, f"person_{stamp}.jpg")
-                    cv2.imwrite(path, self._person_recognition.frame)  # use `annotated` to include the boxes
-                    self.node.get_logger().info(f"Saved {path}")
-                    self._result_pub.publish(String(data=path))
+                # check if person is actually facing the camera
+                if faces and people:
+                    self.save_image()
                     self._state = "idle"
                 elif now > self._wait_end:
-                    self.node.get_logger().warn("No person in frame, capture cancelled")
+                    self.print_log("No person in frame, capture cancelled", "warn")
                     self._result_pub.publish(String(data=""))  # empty = failed
                     self._state = "idle"
 
-            # Publish image with boxes drawn
-            # self._face_recognition.publish_results(image)
-            self._person_recognition.publish_results(image)
-
         finally:
             self._busy = False
+
+    def save_image(self):
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        path = os.path.join(self._save_dir, f"person_{stamp}.jpg")
+        cv2.imwrite(path, self._face_recognition.frame)  # use `annotated` to include the boxes
+        self.print_log(f"Saved {path}", "info")
+        self._result_pub.publish(String(data=path))
+
 
 
 def main():
