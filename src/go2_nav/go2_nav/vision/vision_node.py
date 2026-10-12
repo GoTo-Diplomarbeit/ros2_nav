@@ -3,13 +3,12 @@ import time
 from datetime import datetime
 
 import cv2
-from cv_bridge import CvBridge
-from ultralytics import YOLO
+from sensor_msgs.msg import Image
+from std_msgs.msg import Empty, String
 
 from go2_nav.node_utils import node_runner
 from go2_nav.node_utils.node_wrapper import NodeWrapper
-from sensor_msgs.msg import Image
-from std_msgs.msg import Empty, String
+from go2_nav.vision.image_recognition import ImageRecognition
 
 
 class VisionNode(NodeWrapper):
@@ -17,9 +16,16 @@ class VisionNode(NodeWrapper):
         super().__init__("vision", self._setup_channels)
 
     def _setup_channels(self):
-        self._bridge = CvBridge()
-        # TODO: change to face recognition model instead of person
-        self._model = YOLO("yolov8n.pt")  # small and fast; downloads on first run
+        self._person_recognition = ImageRecognition(
+            self.node,
+            "yolov8n.pt"
+        )
+
+        self._face_recognition = ImageRecognition(
+            self.node,
+            "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov8n-face.pt"
+        )
+
         self._busy = False
 
         # Capture state: "idle" -> "countdown" -> "waiting_for_person" -> "idle"
@@ -45,9 +51,6 @@ class VisionNode(NodeWrapper):
         )
         self._result_pub = self.node.create_publisher(String, "/vision/picture_result", 10)
 
-        # Optional: publish annotated images to view in rviz / rqt_image_view
-        self._debug_pub = self.node.create_publisher(Image, "/vision/people_debug", 1)
-
     #
     def _on_trigger(self, _msg: Empty) -> None:
         if self._state != "idle":
@@ -64,20 +67,11 @@ class VisionNode(NodeWrapper):
             return
         self._busy = True
         try:
-            frame = self._bridge.imgmsg_to_cv2(image, desired_encoding="bgr8")
-
-            results = self._model(frame, classes=[0], conf=0.5, verbose=False)[0]
-
-            people = []
-            for box in results.boxes:
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                people.append((x1, y1, x2, y2, float(box.conf[0])))
-
-            if people:
-                pass
-                # self.node.get_logger().info(f"Detected {len(people)} person(s)")
-
-            annotated = results.plot()
+            # get people who are in frame and draw boxes around them
+            # TODO
+            faces = self._face_recognition.get_results(image)
+            people = self._person_recognition.get_results(
+                self._person_recognition.bridge.cv2_to_imgmsg(self._face_recognition.annotated, encoding="bgr8"))
 
             # --- Capture state machine ---
             now = time.monotonic()
@@ -97,7 +91,7 @@ class VisionNode(NodeWrapper):
                 if people:
                     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
                     path = os.path.join(self._save_dir, f"person_{stamp}.jpg")
-                    cv2.imwrite(path, frame)  # use `annotated` to include the boxes
+                    cv2.imwrite(path, self._person_recognition.frame)  # use `annotated` to include the boxes
                     self.node.get_logger().info(f"Saved {path}")
                     self._result_pub.publish(String(data=path))
                     self._state = "idle"
@@ -107,9 +101,9 @@ class VisionNode(NodeWrapper):
                     self._state = "idle"
 
             # Publish image with boxes drawn
-            out = self._bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
-            out.header = image.header
-            self._debug_pub.publish(out)
+            # self._face_recognition.publish_results(image)
+            self._person_recognition.publish_results(image)
+
         finally:
             self._busy = False
 
