@@ -29,7 +29,7 @@ class MovementNode(NodeWrapper):
 
         self._target_yaw: Optional[float] = None
 
-        self._kp: float = 0.5
+        self._kp: float = 2.0
 
         # Creates a Timer which is called every 0.05s
         self._timer = self.node.create_timer(0.05, self._on_timer)
@@ -42,24 +42,31 @@ class MovementNode(NodeWrapper):
     def _on_timer(self) -> None:
 
         """
-        Method which is called every 0.05s
+        Method which is called every 0.05s, corrects the angular values of the robot
         """
 
         if self._last_command is None:
             return
 
         command_to_send = copy.deepcopy(self._last_command)
-
         yaw = self.movement_backend.get_yaw()
 
         if yaw is not None:
-            self.node.get_logger().info(f"YAW: {yaw:.3f}")
+            self.node.get_logger().info(
+                f"Korrektur aktiv -> YAW: {yaw:.3f}| angz: {self._last_command.angular.z:.3f}"
+            )
 
-        if self._target_yaw is not None:
-            if yaw is not None:
-                error_yaw = self._target_yaw - yaw
-                true_error = math.atan2(math.sin(error_yaw), math.cos(error_yaw))
-                command_to_send.angular.z += true_error * self._kp
+        if abs(self._last_command.angular.z) < 0.01:
+            if self._target_yaw is not None:
+                if yaw is not None:
+                    error_yaw = self._target_yaw - yaw
+                    true_error = math.atan2(math.sin(error_yaw), math.cos(error_yaw))
+                    command_to_send.angular.z += true_error * self._kp
+
+                    # needed to read the target and the error
+                    self.node.get_logger().info(
+                        f"Korrektur aktiv -> TARGET: {self._target_yaw:.3f} | YAW: {yaw:.3f} | TRUE_ERROR: {true_error:.3f}"
+                    )
 
 
         self.movement_backend.send(command_to_send)
@@ -97,7 +104,6 @@ class MovementNode(NodeWrapper):
         Returns: None
 
         """
-
         # Compares the new Twist command to the old one
         if self._last_command != movement_command:
             # Calls the current yaw values and saves them
