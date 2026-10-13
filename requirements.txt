@@ -15,3 +15,11 @@ unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git
 
 # Tests (src/go2_nav/test)
 pytest
+
+starlette
+
+zeroconf
+
+fastapi
+
+uvicorn
