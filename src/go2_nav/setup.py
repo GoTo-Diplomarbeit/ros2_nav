@@ -11,9 +11,10 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name + '/launch', ['launch/bringup.launch.py']),
-        ('share/' + package_name + '/launch', ['launch/navigation.launch.py']),
-        ('share/go2_nav/config', glob('config/*.yaml')),
+        # Globs, so a new launch file or config is installed without editing this list.
+        ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
+        ('share/' + package_name + '/config', glob('config/*.yaml')),
+        ('share/' + package_name + '/rviz', glob('rviz/*.rviz')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
