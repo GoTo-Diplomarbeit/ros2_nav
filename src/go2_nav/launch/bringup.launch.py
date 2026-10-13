@@ -66,4 +66,21 @@ def generate_launch_description():
             name='planner',
             output='screen',
         ),
+        Node(
+            package='go2_nav',
+            executable='camera_node',
+            name='camera',
+            output='screen',
+        ),
+        Node(
+            package='image_transport',
+            executable='republish',
+            name='image_republisher',
+            arguments=['raw', 'compressed'],
+            remappings=[
+                ('in', '/rgb_image'),
+                ('out/compressed', '/rgb_image/compressed'),
+            ],
+            output='screen',
+        ),
     ])
