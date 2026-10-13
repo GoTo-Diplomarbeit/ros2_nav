@@ -1,0 +1,169 @@
+# RTAB-Map configuration for the Go2, replacing slam_toolbox.
+#
+# Why RTAB-Map at all: slam_toolbox is 2D only. It flattens the Velodyne to a single
+# ring of ranges (/scan) and builds one occupancy grid. RTAB-Map keeps the full 3D
+# point cloud in a pose graph, so you get a real 3D map AND a 2D grid projected out
+# of it for Nav2.
+#
+# Sensor choice: the 3D Velodyne, not the D455 camera. The Velodyne cloud is already
+# Cartesian XYZ in frame "velodyne", so it needs no projection. The D455's image
+# topics are tagged "d455_camera_link" (x-forward body convention) while RTAB-Map
+# assumes an RGB-D image frame is OPTICAL (z-forward) - it would build the map
+# rotated 90 degrees, pointing at the ceiling. (Fix, if the camera is ever wanted:
+# in the sim fork's realsense_d455.xacro set <gz_frame_id> to
+# d455_camera_color_optical_frame.)
+#
+# Odometry: taken from CHAMP's existing EKF through TF (odom -> base_footprint), NOT
+# from RTAB-Map's own icp_odometry/rgbd_odometry. That EKF already fuses leg
+# kinematics and IMU, it is far cheaper, and visual/ICP odometry copes badly with a
+# legged robot's bouncy gait. RTAB-Map only corrects the drift (map -> odom).
+#
+# IMPORTANT: RTAB-Map's internal parameters (the Capitalised/Slashed ones such as
+# "Icp/VoxelSize") are ALWAYS strings, even when they hold numbers or booleans.
+# RTAB-Map parses them itself. Writing 0.15 instead of "0.15" makes the node reject
+# the parameter at startup.
+#
+# Results on a scripted test loop through the sim room, compared with the real wall
+# positions: before tuning 22 % of the 2D map cells were "ghost walls" (> 30 cm from
+# any real wall) - after tuning below 0.5 %. Each setting below says why it is set.
+
+# "/**" = applies to every node this file is given to. The launch file passes it to
+# both RTAB-Map ("rtabmap") and its optional viewer ("rtabmap_viz"), which need the
+# same frames and inputs. (With the key "rtabmap:" only, the viewer got nothing and
+# waited forever for camera images.)
+/**:
+  ros__parameters:
+    use_sim_time: true
+
+    # ---- Frames -------------------------------------------------------------
+    frame_id: base_footprint        # the robot body frame, same one slam_toolbox used
+    map_frame_id: map
+    odom_frame_id: odom             # read odometry from TF instead of an /odom topic
+    publish_tf: true                # RTAB-Map publishes map -> odom, like slam_toolbox did
+
+    # How much RTAB-Map should DISTRUST the odometry. A TF transform carries no
+    # uncertainty, so RTAB-Map falls back to these values. Their default (0.001, i.e.
+    # sigma ~3 cm / ~2 deg per step) claims the EKF is near-perfect. It is not: on a test
+    # loop the EKF heading drifted 12 deg, mostly while turning on the spot. With the
+    # default, every lidar correction bigger than ~10 cm was rejected as "a bad loop
+    # closure" (RGBD/OptimizeMaxError), so SLAM just copied the drifting odometry and
+    # walls were drawn twice. 0.01 (sigma ~10 cm / ~6 deg) lets the lidar win.
+    # NOTE: these two are plain ROS parameters -> real numbers, NOT strings.
+    odom_tf_linear_variance: 0.01
+    odom_tf_angular_variance: 0.01
+
+    # ---- Inputs -------------------------------------------------------------
+    subscribe_scan_cloud: true      # the 3D Velodyne cloud
+    subscribe_depth: false
+    subscribe_rgb: false
+    subscribe_rgbd: false
+    subscribe_scan: false
+
+    # Synchronisation only matters with 2+ inputs (e.g. lidar + camera). With the lidar
+    # alone these two do nothing, but they are the right values if a second sensor is
+    # added: simulated sensors never share a timestamp to the nanosecond, so exact sync
+    # would silently match nothing ("Did not receive data since 5 seconds").
+    approx_sync: true
+    sync_queue_size: 20             # "queue_size" is the old name and warns on startup
+
+    # How long to wait (seconds) for the robot's position (TF) at a scan's timestamp
+    # before dropping that scan.
+    wait_for_transform: 0.3
+
+    # ---- Where the map is stored --------------------------------------------
+    # RTAB-Map keeps everything (all scans, all poses) in this database file - it IS
+    # the saved map; the 2D and 3D maps can be rebuilt from it at any time.
+    # PITFALL: navigation_rtabmap.launch.py deletes it at startup by default
+    # (delete_db:=true, so every run maps from scratch). To keep a map, copy the file
+    # away BEFORE the next start:  cp ~/.ros/rtabmap.db ~/maps/<name>.db
+    # View it later with:          rtabmap-databaseViewer ~/maps/<name>.db
+    database_path: ~/.ros/rtabmap.db
+
+    # ---- Registration: ICP against the 3D cloud ------------------------------
+    Reg/Strategy: "1"               # 0=visual, 1=ICP, 2=both. No camera -> ICP.
+    Reg/Force3DoF: "true"           # the Go2 walks on a floor: lock z, roll and pitch,
+                                    # solve only x, y, yaw. Hugely more stable indoors.
+                                    # RGBD/ForceOdom3DoF follows this automatically, and
+                                    # the graph optimiser picks it up too - there is no
+                                    # separate "Optimizer/Slam2D" parameter.
+
+    Icp/PointToPlane: "true"        # plane-based ICP: much better on walls/floors
+    Icp/PointToPlaneK: "20"
+    Icp/Iterations: "10"
+    Icp/VoxelSize: "0.1"            # downsample before matching. The main CPU knob:
+                                    # larger = faster but coarser. 0.15 threw away too
+                                    # much of the sparse 16-ring cloud.
+    Icp/Epsilon: "0.001"
+    Icp/MaxTranslation: "2.0"       # reject absurd corrections (ICP divergence guard)
+    Icp/MaxCorrespondenceDistance: "1.0"
+    Icp/CorrespondenceRatio: "0.2"  # below this ratio the match is rejected
+    Icp/OutlierRatio: "0.7"
+
+    # A room's floor is a huge flat plane, and a flat plane constrains nothing
+    # horizontally - ICP can slide freely across it and still think it fits perfectly.
+    # These settings detect that situation (e.g. a long corridor) and limit how much
+    # ICP is trusted when the geometry is degenerate.
+    Icp/PointToPlaneGroundNormalsUp: "0.8"      # recognise floor normals as "up"
+    Icp/PointToPlaneMinComplexity: "0.02"       # how much structure ICP needs to commit
+    Icp/PointToPlaneLowComplexityStrategy: "1"  # too little structure -> only correct the
+                                                # axes the walls DO constrain, take the rest
+                                                # from odometry (0 = reject, 2 = accept as is)
+    Icp/RangeMin: "0.5"             # ignore returns closer than this (the robot's own
+                                    # body). The simulated Velodyne's minimum range is
+                                    # 0.5 m too, so this is only a safety net.
+
+    # ---- When a new keyframe is added ---------------------------------------
+    # The equivalent of slam_toolbox's minimum_travel_distance / _heading.
+    RGBD/LinearUpdate: "0.1"        # metres of motion before a new graph node
+    RGBD/AngularUpdate: "0.1"       # radians of rotation before a new graph node
+    RGBD/ProximityBySpace: "true"   # loop closure by position (no camera to do it visually)
+    RGBD/ProximityPathMaxNeighbors: "1"
+    RGBD/ProximityMaxGraphDepth: "0"  # default 50 = only compare with the last 50 nodes.
+                                      # One lap of the room is >140 nodes, so coming back
+                                      # to the start was never even checked. 0 = no limit.
+    RGBD/NeighborLinkRefining: "true" # refine every odometry step with lidar ICP against
+                                      # the previous keyframe. This is what corrects the
+                                      # heading drift from turning on the spot - the
+                                      # closest thing to what slam_toolbox did per scan.
+    RGBD/OptimizeFromGraphEnd: "false"  # after a correction, keep the map's origin
+                                        # fixed and move the robot (not the other way)
+    RGBD/CreateOccupancyGrid: "true"  # also build the 2D grid Nav2 needs
+    Rtabmap/DetectionRate: "1.0"    # Hz: how often RTAB-Map updates the map (and
+                                    # publishes /info - that is why /info runs at ~1 Hz)
+
+    Mem/NotLinkedNodesKept: "false" # don't store scans taken while standing still
+    Mem/STMSize: "30"               # the newest 30 keyframes are never used for loop
+                                    # closure (they are "too recent" to count as a revisit)
+    Mem/IncrementalMemory: "true"   # "true" = mapping, "false" = localisation only
+
+    # ---- The 2D occupancy grid handed to Nav2 -------------------------------
+    Grid/Sensor: "0"                # 0 = build the grid from the lidar cloud
+    Grid/CellSize: "0.05"           # matches the 0.05 m you used with slam_toolbox
+    Grid/RangeMax: "8.0"            # same horizon as the old pointcloud_to_laserscan.
+                                    # Tested 5.0: WORSE. Long beams also CLEAR the free
+                                    # space they pass through (RayTracing), so a shorter
+                                    # range leaves more phantom points behind.
+    Grid/3D: "true"                 # MUST be true for a 3D map. The 3D outputs
+                                    # (/octomap_occupied_space shown in rviz, /cloud_map)
+                                    # are built from these grids, so with "false" every
+                                    # point gets flattened to z=0 and you get dots on the
+                                    # floor instead of a room. The 2D /map for Nav2 is
+                                    # published either way (projected down from the 3D
+                                    # grid), so "true" costs CPU but loses nothing.
+    Grid/RayTracing: "true"         # carve out free space between robot and hits.
+                                    # REQUIRED: nav2_params.yaml has allow_unknown:false,
+                                    # so Nav2 refuses to plan through unknown cells.
+    Grid/NormalsSegmentation: "false"  # use a flat height threshold instead of normals
+    Grid/MaxGroundHeight: "0.2"     # below this = floor, not an obstacle. Was 0.1, but
+                                    # the Go2's trot rocks the body about +-7 deg and TF
+                                    # lags that by ~2 deg at the worst moments. A beam
+                                    # hitting the floor a few metres away is then placed
+                                    # 10-20 cm in the air and was drawn as an obstacle.
+                                    # PITFALL: anything lower than 20 cm (a cable, a low
+                                    # step) is now invisible to the map and to Nav2.
+    Grid/MaxObstacleHeight: "2.0"   # above this = ignored. Was 1.0, which sliced the
+                                    # walls off at waist height - a room's walls run to
+                                    # ~2.5 m. 2.0 keeps the walls and drops the ceiling.
+    Grid/GroundIsObstacle: "false"  # the floor is free space, not an obstacle
+    Grid/ClusterRadius: "0.5"       # obstacle points closer than this are grouped;
+                                    # lone stray points are dropped as noise
