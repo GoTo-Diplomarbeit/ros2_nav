@@ -1,12 +1,13 @@
+import copy
+import math
+from typing import Optional
+
 from geometry_msgs.msg import Twist
 
 from go2_nav.movement.movement_backend import MovementBackendType, GazeboBackend, Go2Backend, NetworkInterface
 from go2_nav.node_utils import node_runner
 from go2_nav.node_utils.node_wrapper import NodeWrapper
 
-from typing import Optional
-import copy
-import math
 
 class MovementNode(NodeWrapper):
     """
@@ -51,10 +52,10 @@ class MovementNode(NodeWrapper):
         command_to_send = copy.deepcopy(self._last_command)
         yaw = self.movement_backend.get_yaw()
 
-        if yaw is not None:
-            self.node.get_logger().info(
-                f"Korrektur aktiv -> YAW: {yaw:.3f}| angz: {self._last_command.angular.z:.3f}"
-            )
+        # for returning the angular values in the log
+        # if yaw is not None:
+        # self.node.get_logger().info(
+        # f"Korrektur aktiv -> YAW: {yaw:.3f}")
 
         if abs(self._last_command.angular.z) < 0.01:
             if self._target_yaw is not None:
@@ -64,13 +65,10 @@ class MovementNode(NodeWrapper):
                     command_to_send.angular.z += true_error * self._kp
 
                     # needed to read the target and the error
-                    self.node.get_logger().info(
-                        f"Korrektur aktiv -> TARGET: {self._target_yaw:.3f} | YAW: {yaw:.3f} | TRUE_ERROR: {true_error:.3f}"
-                    )
-
+                    # self.node.get_logger().info(
+                    # f"Korrektur aktiv -> TARGET: {self._target_yaw:.3f} | YAW: {yaw:.3f} | TRUE_ERROR: {true_error:.3f}")
 
         self.movement_backend.send(command_to_send)
-
 
     def _setup_channels(self, movement_backend_type: MovementBackendType) -> None:
         """
@@ -93,7 +91,7 @@ class MovementNode(NodeWrapper):
 
         else:
             # The required network interface
-            _network_interface = NetworkInterface("eht0")
+            _network_interface = NetworkInterface("eth0")
 
             # Create the required backend
             self.movement_backend = Go2Backend(_network_interface)
