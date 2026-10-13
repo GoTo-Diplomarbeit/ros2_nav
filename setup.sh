@@ -84,7 +84,10 @@ sudo apt install -y \
   ros-jazzy-xacro \
   ros-jazzy-robot-localization \
   ros-jazzy-velodyne \
-  ros-jazzy-velodyne-description
+  ros-jazzy-velodyne-description \
+  ros-jazzy-nav2-bringup \
+  ros-jazzy-slam-toolbox \
+  ros-jazzy-pointcloud-to-laserscan
 
 echo "### 5. Source ROS 2 for this and future shells ###"
 append_line_once "$HOME/.bashrc" "source $ROS_SETUP_FILE"
