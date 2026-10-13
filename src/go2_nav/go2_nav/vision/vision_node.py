@@ -79,6 +79,7 @@ class VisionNode(NodeWrapper):
             return
         self._busy = True
         try:
+
             # get people who are in frame and draw boxes around them
             faces = self._face_recognition.get_results(image)
 
@@ -88,6 +89,19 @@ class VisionNode(NodeWrapper):
                     self._face_recognition.annotated, encoding="bgr8"
                 )
             )
+
+            frame = self._person_recognition.annotated
+            height, width = frame.shape[:2]
+
+            box_width = 150  # adjust these to set the box size
+            box_height = 400
+            x1 = (width - box_width) // 2
+            y1 = (height - box_height) // 2
+            x2 = x1 + box_width
+            y2 = y1 + box_height
+
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
 
             # Publish image with boxes drawn
             # self._face_recognition.publish_results(image)
