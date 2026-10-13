@@ -90,6 +90,8 @@ class VisionNode(NodeWrapper):
                 )
             )
 
+            # draw box where person is supposed to stand
+
             frame = self._person_recognition.annotated
             height, width = frame.shape[:2]
 
