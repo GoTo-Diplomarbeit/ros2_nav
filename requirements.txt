@@ -4,6 +4,11 @@
 # They ship with ROS 2 Jazzy (apt: ros-jazzy-desktop) and are only importable after
 # sourcing /opt/ros/jazzy/setup.bash. Install the venv through setup.sh so it carries
 # that environment.
+#
+# PITFALL: ~/venvs/go2 is only what PyCharm uses. Nodes started with "ros2 launch" run
+# with the SYSTEM python (/usr/bin/python3) and never see the venv. setup.sh therefore
+# also installs the packages the nodes import at runtime for the system python
+# (fastapi, uvicorn, starlette, zeroconf via apt; ultralytics via pip --user).
 
 # ROS 2 Jazzy's compiled packages are built against NumPy 1.x
 numpy<2
@@ -16,10 +21,13 @@ unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git
 # Tests (src/go2_nav/test)
 pytest
 
+# App communication (go2_nav/communication/camera_node.py): web server for the app
+# (fastapi + starlette, served by uvicorn) and network discovery (zeroconf).
+fastapi
 starlette
-
+uvicorn
 zeroconf
 
-fastapi
-
-uvicorn
+# Person and face recognition (go2_nav/vision/image_recognition.py): YOLO models.
+# Large: pulls in PyTorch (a few GB).
+ultralytics

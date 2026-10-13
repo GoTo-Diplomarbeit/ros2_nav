@@ -9,9 +9,10 @@
 # The clone itself is the ROS 2 workspace (the folder that contains src/). The Go2 CHAMP
 # package is cloned and built in a SEPARATE workspace, ~/go2_ws, outside your repository;
 # your workspace is built on top of it. The script also installs ROS 2 + Gazebo, creates
-# the PyCharm virtualenv (~/venvs/go2) with the ROS 2 environment baked in, and installs
-# the Unitree SDK. It never clones the private project repository and never writes
-# third-party code into your repository.
+# the PyCharm virtualenv (~/venvs/go2) with the ROS 2 environment baked in, installs
+# the Python packages the nodes need at runtime (for the system python, see step 4b),
+# and installs the Unitree SDK. It never clones the private project repository and
+# never writes third-party code into your repository.
 #
 # Run as your normal user, NOT with sudo (the script calls sudo where needed).
 # Safe to re-run: every step skips work that is already done.
@@ -89,6 +90,26 @@ sudo apt install -y \
   ros-jazzy-slam-toolbox \
   ros-jazzy-pointcloud-to-laserscan \
   ros-jazzy-rtabmap-ros
+
+echo "### 4b. Python packages the project's nodes import at runtime ###"
+# These must be installed for the SYSTEM python: "ros2 launch" runs the nodes with
+# /usr/bin/python3, NOT with the PyCharm venv (~/venvs/go2), so packages that exist
+# only in the venv are missing at runtime ("ModuleNotFoundError").
+# App communication (camera_node): available as Ubuntu packages, the clean way. The
+# venv is created with --system-site-packages, so PyCharm sees these too.
+sudo apt install -y \
+  python3-fastapi \
+  python3-uvicorn \
+  python3-starlette \
+  python3-zeroconf
+# Person/face recognition (ultralytics = YOLO) is not packaged for Ubuntu, so it comes
+# from pip. Ubuntu blocks pip for the system python (PEP 668): --user installs into
+# ~/.local only (no sudo, apt's files stay untouched), and --break-system-packages is
+# the explicit opt-in for that. numpy/opencv are pinned like in requirements.txt,
+# because ROS 2 Jazzy's cv_bridge is built against NumPy 1.x.
+# PITFALLS: large download (pulls in PyTorch, a few GB). The venv does not see
+# ~/.local, so PyCharm may mark "import ultralytics" as unresolved - running is fine.
+python3 -m pip install --user --break-system-packages ultralytics "numpy<2" "opencv-python<4.12"
 
 echo "### 5. Source ROS 2 for this and future shells ###"
 append_line_once "$HOME/.bashrc" "source $ROS_SETUP_FILE"
