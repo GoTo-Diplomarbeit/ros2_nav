@@ -13,3 +13,6 @@
 
 # Custom Scripts
 /scripts/
+
+# Python bytecode caches (created automatically when Python runs)
+__pycache__/
