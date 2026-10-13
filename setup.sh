@@ -87,7 +87,8 @@ sudo apt install -y \
   ros-jazzy-velodyne-description \
   ros-jazzy-nav2-bringup \
   ros-jazzy-slam-toolbox \
-  ros-jazzy-pointcloud-to-laserscan
+  ros-jazzy-pointcloud-to-laserscan \
+  ros-jazzy-rtabmap-ros
 
 echo "### 5. Source ROS 2 for this and future shells ###"
 append_line_once "$HOME/.bashrc" "source $ROS_SETUP_FILE"
