@@ -1,3 +1,7 @@
+import copy
+import math
+from typing import Optional
+
 from geometry_msgs.msg import Twist
 
 from go2_nav.movement.movement_backend import MovementBackendType, GazeboBackend, Go2Backend, NetworkInterface
@@ -11,19 +15,61 @@ class MovementNode(NodeWrapper):
     Subscribes to /planner_cmd_vel; forwards to /cmd_vel for simulator use or translates into Sport Mode SDK calls for the real robot.
     """
 
-    def __init__(self, movement_backend_type: MovementBackendType) -> None:
+    def __init__(self, movement_backend_type: Optional[MovementBackendType] = None) -> None:
         """
         Initialize the movement node and starts the movement timer.
         Args:
-            movement_backend_type (MovementBackendType): Whether to use simulator or real robot.
+            movement_backend_type (Optional[MovementBackendType]): Whether to use simulator or real robot.
+                If None, the "backend" ROS parameter ("gazebo" or "go2") decides.
         """
 
         # Movement Node for the whole Movement class
         super().__init__("movement", lambda: self._setup_channels(movement_backend_type))
 
+        # Variable for saving newest incoming Twist command
+        self._last_command: Optional[Twist] = None
+
+        self._target_yaw: Optional[float] = None
+
+        self._kp: float = 2.0
+
+        # Creates a Timer which is called every 0.05s
+        self._timer = self.node.create_timer(0.05, self._on_timer)
+
+
     # --
     # -- Private class functions
     # --
+
+    def _on_timer(self) -> None:
+
+        """
+        Method which is called every 0.05s, corrects the angular values of the robot
+        """
+
+        if self._last_command is None:
+            return
+
+        command_to_send = copy.deepcopy(self._last_command)
+        yaw = self.movement_backend.get_yaw()
+
+        # for returning the angular values in the log
+        # if yaw is not None:
+        # self.node.get_logger().info(
+        # f"Korrektur aktiv -> YAW: {yaw:.3f}")
+
+        if abs(self._last_command.angular.z) < 0.01:
+            if self._target_yaw is not None:
+                if yaw is not None:
+                    error_yaw = self._target_yaw - yaw
+                    true_error = math.atan2(math.sin(error_yaw), math.cos(error_yaw))
+                    command_to_send.angular.z += true_error * self._kp
+
+                    # needed to read the target and the error
+                    # self.node.get_logger().info(
+                    # f"Korrektur aktiv -> TARGET: {self._target_yaw:.3f} | YAW: {yaw:.3f} | TRUE_ERROR: {true_error:.3f}")
+
+        self.movement_backend.send(command_to_send)
 
     def _setup_channels(self, movement_backend_type: MovementBackendType) -> None:
         """
@@ -31,6 +77,14 @@ class MovementNode(NodeWrapper):
         Returns: None
 
         """
+        # Parameters - can be set from the launch file or with --ros-args -p
+        self.node.declare_parameter("backend", MovementBackendType.GAZEBO.name.lower())
+        self.node.declare_parameter("network_interface", "eth0")
+
+        # Explicit argument wins, otherwise use the "backend" parameter
+        if movement_backend_type is None:
+            movement_backend_type = MovementBackendType[self.node.get_parameter("backend").value.upper()]
+
         # The selected movement backend type
         self._planner_subscription = self.node.create_subscription(Twist,
                                                                             "/planner_cmd_vel",
@@ -42,11 +96,11 @@ class MovementNode(NodeWrapper):
             _movement_command_publisher = self.node.create_publisher(Twist, "/cmd_vel", 10)
 
             # Create the required backend
-            self.movement_backend = GazeboBackend(_movement_command_publisher)
+            self.movement_backend = GazeboBackend(_movement_command_publisher, self.node)
 
         else:
             # The required network interface
-            _network_interface = NetworkInterface("eht0")
+            _network_interface = NetworkInterface(self.node.get_parameter("network_interface").value)
 
             # Create the required backend
             self.movement_backend = Go2Backend(_network_interface)
@@ -57,16 +111,20 @@ class MovementNode(NodeWrapper):
         Returns: None
 
         """
+        # Compares the new Twist command to the old one
+        if self._last_command != movement_command:
+            # Calls the current yaw values and saves them
+            yaw = self.movement_backend.get_yaw()
+            self._target_yaw = yaw
+
         # Send the movement command to the backend
-        self.movement_backend.send(movement_command)
+        self._last_command = movement_command
 
 
 # Main function - Called when executing file
 def main():
-    _required_backend = MovementBackendType.GAZEBO
-
-    # Run the movement node
-    node_runner.run_node(lambda: MovementNode(_required_backend))
+    # Run the movement node - the backend is chosen by the "backend" ROS parameter
+    node_runner.run_node(lambda: MovementNode())
 
 
 if __name__ == '__main__':
