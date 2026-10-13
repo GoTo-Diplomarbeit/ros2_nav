@@ -1,5 +1,17 @@
+#!/usr/bin/env bash
+# Build go2_nav and start the project's own nodes (bringup.launch.py).
+# Start the simulator first (scripts/launch_gazebo_with_lidar.sh).
+
+# Stop at the first failing command. Without this, a failing "cd" just carried on
+# in whatever folder the script was started from, built the project THERE, and
+# then launched the old, stale build - e.g. "executable 'camera_node' not found".
+set -e
+
 source ~/go2_ws/install/setup.bash
-cd /home/gazebo-kilian/Diplomarbeit_DAWG/ros2_nav
+
+# The repo root, found relative to this script, so it works on every computer.
+# (A hard-coded path like /home/<name>/... only exists on one person's machine.)
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 colcon build --symlink-install --packages-select go2_nav
 source install/setup.bash
