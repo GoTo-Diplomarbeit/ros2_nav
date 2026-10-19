@@ -1,5 +1,5 @@
 """
-Starts the project's own nodes (movement, vision, planner) plus mapping + navigation.
+Starts the project's own nodes (mission state, movement, vision, planner, camera) plus mapping + navigation.
 
 Launch arguments:
     backend:=gazebo|go2        where movement commands go (simulator or real robot)
@@ -46,6 +46,13 @@ def generate_launch_description():
                               description="SLAM backend: slam_toolbox (2D map) or rtabmap (3D map + 2D grid)"),
         slam_toolbox_navigation_launch,
         rtabmap_navigation_launch,
+        # Single source of truth for the mission state - the other nodes follow it
+        Node(
+            package='go2_nav',
+            executable='state_node',
+            name='mission_state',
+            output='screen',
+        ),
         Node(
             package='go2_nav',
             executable='movement_node',
