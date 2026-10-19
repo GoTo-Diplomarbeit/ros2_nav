@@ -25,7 +25,8 @@
 #   - Don't steer with the keyboard while Nav2 is driving to a goal: both send
 #     /cmd_vel and the robot stutters between the two.
 #   - New launch/config files still need a build first:
-#       colcon build --symlink-install --packages-select go2_nav
+#       PYTHONNOUSERSITE=1 colcon build --symlink-install --packages-select go2_nav
+#     (PYTHONNOUSERSITE=1 - see scripts/build_run_project.sh)
 # =============================================================================
 
 # ---- Settings you may want to change ----------------------------------------

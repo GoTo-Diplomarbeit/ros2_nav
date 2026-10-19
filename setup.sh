@@ -109,6 +109,8 @@ sudo apt install -y \
 # because ROS 2 Jazzy's cv_bridge is built against NumPy 1.x.
 # PITFALLS: large download (pulls in PyTorch, a few GB). The venv does not see
 # ~/.local, so PyCharm may mark "import ultralytics" as unresolved - running is fine.
+# PITFALL: PyTorch pulls in setuptools >= 77 here, which breaks colcon builds - that is
+# why every colcon build below runs with PYTHONNOUSERSITE=1.
 python3 -m pip install --user --break-system-packages ultralytics "numpy<2" "opencv-python<4.12"
 
 echo "### 5. Source ROS 2 for this and future shells ###"
@@ -127,13 +129,17 @@ if [ ! -d "$CHAMP_WORKSPACE_DIRECTORY/src/unitree_go2_ros2" ]; then
 fi
 cd "$CHAMP_WORKSPACE_DIRECTORY"
 rosdep install --from-paths src --ignore-src -r -y
-colcon build --symlink-install
+# PYTHONNOUSERSITE=1: build with Ubuntu's setuptools, not the newer one that pip puts
+# into ~/.local together with PyTorch (step 4b). setuptools >= 80 dropped an option
+# 'colcon build --symlink-install' needs (error: option --uninstall not recognized).
+# Only affects the build - the nodes still find ~/.local packages when they run.
+PYTHONNOUSERSITE=1 colcon build --symlink-install
 source "$CHAMP_WORKSPACE_DIRECTORY/install/setup.bash"
 
 echo "### 8. Your workspace, built on top of the CHAMP workspace ###"
 cd "$WORKSPACE_DIRECTORY"
 rosdep install --from-paths src --ignore-src -r -y
-colcon build --symlink-install
+PYTHONNOUSERSITE=1 colcon build --symlink-install  # see step 7
 append_line_once "$HOME/.bashrc" "source $CHAMP_WORKSPACE_DIRECTORY/install/setup.bash"
 append_line_once "$HOME/.bashrc" "source $WORKSPACE_SETUP_FILE"
 source "$WORKSPACE_SETUP_FILE"

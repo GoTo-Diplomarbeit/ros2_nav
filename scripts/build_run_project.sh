@@ -13,7 +13,11 @@ source ~/go2_ws/install/setup.bash
 # (A hard-coded path like /home/<name>/... only exists on one person's machine.)
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-colcon build --symlink-install --packages-select go2_nav
+# PYTHONNOUSERSITE=1: build with Ubuntu's setuptools, not the newer one that pip puts
+# into ~/.local together with PyTorch (step 4b). setuptools >= 80 dropped an option
+# 'colcon build --symlink-install' needs (error: option --uninstall not recognized).
+# Only affects the build - the nodes still find ~/.local packages when they run.
+PYTHONNOUSERSITE=1 colcon build --symlink-install --packages-select go2_nav
 source install/setup.bash
 
 ros2 launch go2_nav bringup.launch.py log_level:=warn
