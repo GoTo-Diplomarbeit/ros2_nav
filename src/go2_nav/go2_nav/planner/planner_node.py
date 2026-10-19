@@ -4,7 +4,7 @@ from go2_nav.node_utils.node_wrapper import NodeWrapper
 
 class PlannerNode(NodeWrapper):
     def __init__(self):
-        super().__init__("planner")
+        super().__init__("planner", self._setup_channels)
 
     def _setup_channels(self):
         pass
