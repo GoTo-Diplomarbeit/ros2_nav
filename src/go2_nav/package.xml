@@ -6,7 +6,7 @@
     <maintainer email="peter.promok07@htl-salzburg.ac.at">Peter Promok</maintainer>
     <maintainer email="kilian.schneider07@htl-salzburg.ac.at">Kilian Schneider</maintainer>
     <maintainer email="micah.labendia07@htl-salzburg.ac.at">Micah Labendia</maintainer>
-    <maintainer email="alex.pticek@htl-salzburg.ac.at">Alex Pticek</maintainer>
+    <maintainer email="alex.pticek07@htl-salzburg.ac.at">Alex Pticek</maintainer>
     <license>Apache-2.0</license>
 
     <depend>rclpy</depend>

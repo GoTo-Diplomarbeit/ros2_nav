@@ -19,7 +19,7 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Peter Promok, Kilian Schneider, Micah Labendia, Alex Pticek',
-    maintainer_email='peter.promok07@htl-salzburg.ac.at, kilian.schneider07@htl-salzburg.ac.at, micah.labendia07@htl-salzburg.ac.at, alex.pticek@htl-salzburg.ac.at',
+    maintainer_email='peter.promok07@htl-salzburg.ac.at, kilian.schneider07@htl-salzburg.ac.at, micah.labendia07@htl-salzburg.ac.at, alex.pticek07@htl-salzburg.ac.at',
     description='Go2 mapping and navigation',
     license='Apache-2.0',
     entry_points={
