@@ -7,8 +7,13 @@
 #   3. Keyboard teleop, right here in this terminal
 #
 # Usage:
+#   scripts/run_sim_mapping.sh [slam] [world]
 #   scripts/run_sim_mapping.sh                  # RTAB-Map: 3D map + 2D map
 #   scripts/run_sim_mapping.sh slam_toolbox     # the old 2D-only pipeline
+#   scripts/run_sim_mapping.sh rtabmap school_with_person   # another Gazebo world
+#
+#   world = a Gazebo world from ~/go2_ws/src/unitree_go2_ros2/unitree_go2_description/worlds/
+#           (file name without .sdf), or a full path to an .sdf file. Default: "default".
 #
 # Stop EVERYTHING: press Ctrl+C in this terminal (while teleop is running).
 #
@@ -42,6 +47,7 @@ RTABMAP_ATTEMPTS=3    # how often to restart RTAB-Map if it gets stuck at startu
 # -----------------------------------------------------------------------------
 
 SLAM="${1:-rtabmap}"
+WORLD="${2:-default}"
 if [[ "$SLAM" != "rtabmap" && "$SLAM" != "slam_toolbox" ]]; then
     echo "Unknown SLAM backend '$SLAM'. Use: rtabmap (default) or slam_toolbox"
     exit 1
@@ -148,9 +154,10 @@ trap 'exit 130' INT TERM HUP  # Ctrl+C / closed window -> exit -> cleanup
 # rviz: RTAB-Map's launch brings its own rviz (3D view); slam_toolbox uses the sim's.
 # $SIM_EXTRA_ARGS is deliberately NOT in quotes, so "a:=1 b:=2" becomes two arguments.
 if [[ "$SLAM" == "rtabmap" ]]; then sim_rviz=false; else sim_rviz=true; fi
-echo "[1/3] Starting the simulator          (log: $LOG_DIR/sim.log)"
+echo "[1/3] Starting the simulator, world '$WORLD' (log: $LOG_DIR/sim.log)"
 SIM_ID=$(start_in_background "$LOG_DIR/sim.log" \
-    ros2 launch unitree_go2_sim unitree_go2_launch.py static_map_to_odom:=false rviz:=$sim_rviz $SIM_EXTRA_ARGS)
+    ros2 launch unitree_go2_sim unitree_go2_launch.py static_map_to_odom:=false rviz:=$sim_rviz \
+    world:="$WORLD" $SIM_EXTRA_ARGS)
 
 echo "      waiting for the lidar ..."
 wait_for_message /velodyne_points/points 180 "$SIM_ID"
