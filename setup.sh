@@ -2,7 +2,7 @@
 # Setup for the Go2 navigation project (Ubuntu 24.04, ROS 2 Jazzy).
 #
 # Run it from inside your clone of the project:
-#   git clone https://github.com/Humanoiderdepp/ros2_nav.git
+#   git clone https://github.com/GoTo-Diplomarbeit/ros2_nav.git
 #   cd ros2_nav
 #   ./setup.sh
 #
@@ -17,13 +17,19 @@
 # Run as your normal user, NOT with sudo (the script calls sudo where needed).
 # Safe to re-run: every step skips work that is already done.
 # Re-run it after 'colcon build' changes the workspace overlay, to refresh the venv.
+#
+# Getting the newest version (after a teammate pushed something):
+#   ./setup.sh --update
+# Only pulls both repositories, rebuilds both workspaces, downloads the Gazebo models
+# the worlds need and refreshes the venv - it skips the long apt/pip installs.
+# Needs one full run of ./setup.sh first.
 
 set -eo pipefail
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-GO2_CHAMP_REPOSITORY_URL="https://github.com/Humanoiderdepp/unitree_go2_ros2"
+GO2_CHAMP_REPOSITORY_URL="https://github.com/GoTo-Diplomarbeit/unitree_go2_ros2"
 CHAMP_WORKSPACE_DIRECTORY="$HOME/go2_ws"
 UNITREE_SDK_REPOSITORY_URL="https://github.com/unitreerobotics/unitree_sdk2_python.git"
 
@@ -43,6 +49,20 @@ UNITREE_SDK_DIRECTORY="$HOME/unitree_sdk2_python"
 ROS_SETUP_FILE="/opt/ros/jazzy/setup.bash"
 WORKSPACE_SETUP_FILE="$WORKSPACE_DIRECTORY/install/setup.bash"
 VENV_BIN="$VENV_DIRECTORY/bin"
+SCRIPT_PATH="$SCRIPT_DIRECTORY/$(basename "${BASH_SOURCE[0]}")"
+WORLDS_DIRECTORY="$CHAMP_WORKSPACE_DIRECTORY/src/unitree_go2_ros2/unitree_go2_description/worlds"
+
+# --update: skip the one-time installs (steps 1-4b, 6, 10), keep everything else.
+UPDATE_ONLY=false
+case "${1:-}" in
+  "") ;;
+  --update) UPDATE_ONLY=true ;;
+  *)
+    echo "Usage: ./setup.sh            full setup (first time)" >&2
+    echo "       ./setup.sh --update   get the newest version of both repositories and rebuild" >&2
+    exit 1
+    ;;
+esac
 
 if [ -n "${SUDO_USER:-}" ] || [ "$(id -u)" -eq 0 ]; then
   echo "ERROR: run this script as your normal user, not with sudo." >&2
@@ -56,6 +76,61 @@ append_line_once() {
   grep -qxF "$2" "$1" || echo "$2" >> "$1"
 }
 
+update_git_repository() {
+  # $1 = folder of a git clone. Pulls the newest commits of the branch that is checked
+  # out. Never stops the script: if pulling is not possible, it warns and the setup
+  # carries on with the local version.
+  # --ff-only: only moves forward to GitHub's version. If your branch has commits that
+  # GitHub doesn't have AND GitHub has new ones, it refuses instead of merging - merging
+  # is a decision you should make yourself (in PyCharm: Git -> Pull).
+  # GIT_TERMINAL_PROMPT=0: fail right away instead of waiting for a password the script
+  # can't type (private repository, terminal git not logged in).
+  local repository_directory=$1
+  local branch
+  branch="$(git -C "$repository_directory" rev-parse --abbrev-ref HEAD)"
+  if ! git -C "$repository_directory" rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" > /dev/null 2>&1; then
+    echo "  NOTE: '$branch' in $repository_directory has no branch on GitHub to pull from - not updated."
+    return 0
+  fi
+  if GIT_TERMINAL_PROMPT=0 git -C "$repository_directory" pull --ff-only; then
+    return 0
+  fi
+  echo "  WARNING: could not update $repository_directory (branch '$branch')." >&2
+  echo "           Usual causes: no internet, not logged in to GitHub in the terminal," >&2
+  echo "           uncommitted changes in the same files, or your branch and GitHub's" >&2
+  echo "           both have new commits. Pull it in PyCharm (Git -> Pull), then re-run." >&2
+  echo "           Continuing with the local version." >&2
+}
+
+# ---------------------------------------------------------------------------
+echo "### 0. Newest version of the project ###"
+# Done first, so the rest of the setup runs with the newest files. If the pull changed
+# anything, setup.sh restarts itself: this very file may be one of the changed ones,
+# and the old version must not carry on with half-old, half-new steps.
+# SETUP_SH_RESTARTED makes sure it restarts only once.
+if git -C "$SCRIPT_DIRECTORY" rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+  project_version_before="$(git -C "$SCRIPT_DIRECTORY" rev-parse HEAD)"
+  update_git_repository "$SCRIPT_DIRECTORY"
+  if [ "$(git -C "$SCRIPT_DIRECTORY" rev-parse HEAD)" != "$project_version_before" ] \
+      && [ -z "${SETUP_SH_RESTARTED:-}" ]; then
+    echo "  The project was updated - restarting with the new setup.sh ..."
+    SETUP_SH_RESTARTED=1 exec bash "$SCRIPT_PATH" "$@"
+  fi
+else
+  echo "  NOTE: $SCRIPT_DIRECTORY is not a git clone - not updated."
+fi
+
+if [ "$UPDATE_ONLY" = true ]; then
+  # The update skips the installs, so they must have happened before.
+  if [ ! -f "$ROS_SETUP_FILE" ] || [ ! -d "$CHAMP_WORKSPACE_DIRECTORY/src/unitree_go2_ros2" ]; then
+    echo "ERROR: --update needs a finished full setup. Run ./setup.sh without --update first." >&2
+    exit 1
+  fi
+  echo "--update: skipping the one-time installs (steps 1-4b, 6 and 10)."
+fi
+
+# ===== One-time installs: steps 1-4b (skipped by --update) ==================
+if [ "$UPDATE_ONLY" = false ]; then
 # ---------------------------------------------------------------------------
 echo "### 1. Base system prep ###"
 sudo apt update
@@ -112,20 +187,27 @@ sudo apt install -y \
 # PITFALL: PyTorch pulls in setuptools >= 77 here, which breaks colcon builds - that is
 # why every colcon build below runs with PYTHONNOUSERSITE=1.
 python3 -m pip install --user --break-system-packages ultralytics "numpy<2" "opencv-python<4.12"
+fi
+# ===== End of the one-time installs ========================================
 
 echo "### 5. Source ROS 2 for this and future shells ###"
 append_line_once "$HOME/.bashrc" "source $ROS_SETUP_FILE"
 source "$ROS_SETUP_FILE"
 
-echo "### 6. rosdep ###"
-sudo apt install -y python3-rosdep
-sudo rosdep init 2>/dev/null || true
-rosdep update
+if [ "$UPDATE_ONLY" = false ]; then
+  echo "### 6. rosdep ###"
+  sudo apt install -y python3-rosdep
+  sudo rosdep init 2>/dev/null || true
+  rosdep update
+fi
 
 echo "### 7. Go2 CHAMP package: its own workspace, outside your repository ###"
 mkdir -p "$CHAMP_WORKSPACE_DIRECTORY/src"
 if [ ! -d "$CHAMP_WORKSPACE_DIRECTORY/src/unitree_go2_ros2" ]; then
   git clone "$GO2_CHAMP_REPOSITORY_URL" "$CHAMP_WORKSPACE_DIRECTORY/src/unitree_go2_ros2"
+else
+  # Already cloned on an earlier run: get the newest version (new worlds, fixes).
+  update_git_repository "$CHAMP_WORKSPACE_DIRECTORY/src/unitree_go2_ros2"
 fi
 cd "$CHAMP_WORKSPACE_DIRECTORY"
 rosdep install --from-paths src --ignore-src -r -y
@@ -135,6 +217,25 @@ rosdep install --from-paths src --ignore-src -r -y
 # Only affects the build - the nodes still find ~/.local packages when they run.
 PYTHONNOUSERSITE=1 colcon build --symlink-install
 source "$CHAMP_WORKSPACE_DIRECTORY/install/setup.bash"
+
+echo "### 7b. Gazebo models the worlds download from the internet ###"
+# A world can <include> a ready-made model from Gazebo Fuel, the online model library
+# (e.g. the standing person in school_with_person.sdf). Gazebo downloads such a model
+# on the first start of the world - slow, and impossible without internet. Downloading
+# them here puts them in the cache (~/.gz/fuel), so every world starts offline later.
+# The addresses are read out of the world files, so new worlds need no change here.
+# A failed download only warns: Gazebo just tries again when the world starts.
+fuel_model_addresses="$(grep -ho '<uri>https://fuel\.gazebosim\.org/[^<]*</uri>' "$WORLDS_DIRECTORY"/*.sdf 2>/dev/null \
+  | sed 's|</\?uri>||g' | sort -u || true)"
+if [ -z "$fuel_model_addresses" ]; then
+  echo "  No world uses a Fuel model."
+fi
+while IFS= read -r model_address; do
+  [ -z "$model_address" ] && continue
+  echo "  $model_address"
+  timeout 300 gz fuel download --url "$model_address" \
+    || echo "  WARNING: download failed - Gazebo will try again when the world starts." >&2
+done <<< "$fuel_model_addresses"
 
 echo "### 8. Your workspace, built on top of the CHAMP workspace ###"
 cd "$WORKSPACE_DIRECTORY"
@@ -260,15 +361,17 @@ if ! env -i HOME="$HOME" "$VENV_BIN/python" -c "import sys, rclpy; assert sys.pr
 fi
 
 # ---------------------------------------------------------------------------
-echo "### 10. Unitree SDK inside that virtualenv ###"
-if [ ! -d "$UNITREE_SDK_DIRECTORY" ]; then
-  git clone "$UNITREE_SDK_REPOSITORY_URL" "$UNITREE_SDK_DIRECTORY"
+if [ "$UPDATE_ONLY" = false ]; then
+  echo "### 10. Unitree SDK inside that virtualenv ###"
+  if [ ! -d "$UNITREE_SDK_DIRECTORY" ]; then
+    git clone "$UNITREE_SDK_REPOSITORY_URL" "$UNITREE_SDK_DIRECTORY"
+  fi
+  # Keep NumPy below 2: ROS 2 Jazzy's compiled packages are built against NumPy 1.x.
+  "$VENV_BIN/python" -m pip install "numpy<2" "opencv-python<4.12"
+  # Regular (non-editable) install so PyCharm can resolve it. ROS is sourced above,
+  # which lets pip build cyclonedds against the CycloneDDS that ROS 2 ships.
+  "$VENV_BIN/python" -m pip install "$UNITREE_SDK_DIRECTORY"
 fi
-# Keep NumPy below 2: ROS 2 Jazzy's compiled packages are built against NumPy 1.x.
-"$VENV_BIN/python" -m pip install "numpy<2" "opencv-python<4.12"
-# Regular (non-editable) install so PyCharm can resolve it. ROS is sourced above,
-# which lets pip build cyclonedds against the CycloneDDS that ROS 2 ships.
-"$VENV_BIN/python" -m pip install "$UNITREE_SDK_DIRECTORY"
 
 echo "### 11. Verification with a clean environment ###"
 env -i HOME="$HOME" "$VENV_BIN/python" -c \
