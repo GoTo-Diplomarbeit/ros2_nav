@@ -73,6 +73,5 @@ jobs:
         run: |
           source /opt/ros/jazzy/setup.bash
           source go2_ws/install/setup.bash
-          cd go2_ws/src/go2_nav
-          pip install pytest
-          pytest test/ --tb=short
+          python3 -m pip install --user pytest
+          python3 -m pytest go2_ws/src/go2_nav/test --tb=short
