@@ -75,7 +75,7 @@ def generate_launch_description():
         ),
         Node(
             package='go2_nav',
-            executable='camera_node',
+            executable='web_server_node',
             name='camera',
             output='screen',
         ),

@@ -78,7 +78,7 @@ class NodeWrapper(ABC):
         """
         The node's guarded work - override in the inheritor. Called every run_period_s
         while is_active() is True. Must return quickly: it runs on the node's only
-        thread, so a slow _run() delays all of the node's callbacks.
+        thread, so a slow _run() delays all the node's callbacks.
         """
 
     def on_state_enter(self, state: State) -> None:
