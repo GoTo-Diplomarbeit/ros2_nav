@@ -6,12 +6,22 @@ import cv2
 from sensor_msgs.msg import Image
 from std_msgs.msg import Empty, String
 
-from goto.node_utils import node_runner
-from goto.node_utils.node_wrapper import NodeWrapper
-from goto.vision.image_recognition import ImageRecognition
+from go2_nav.node_utils import node_runner
+from go2_nav.node_utils.node_wrapper import NodeWrapper
+from go2_nav.vision.image_recognition import ImageRecognition
 
-# TODO: only take picture when person is in a specific box
+# minimum box area of person
+# aka how close the person is to the camera
+MIN_PERSON_AREA = 28000
+
+# box width and height where person is supposed to stand in
+# box is always centered
+BOX_WIDTH = 250
+BOX_HEIGHT = 465
+
 # TODO: change timer logic
+
+# TODO: only take photo of the closest person
 
 
 class VisionNode(NodeWrapper):
@@ -25,6 +35,59 @@ class VisionNode(NodeWrapper):
             self.node.get_logger().info(log)
         elif msg_type == "error":
             self.node.get_logger().error(log)
+
+    # check if box is inside a drawn rectangle
+    @staticmethod
+    def _is_box_inside_rectangle(box, rectangle) -> bool:
+        box_x1, box_y1, box_x2, box_y2 = box[:4]
+        rect_x1, rect_y1, rect_x2, rect_y2 = rectangle
+        # check if box is inside rectangle
+        return (
+            box_x1 >= rect_x1
+            and box_y1 >= rect_y1
+            and box_x2 <= rect_x2
+            and box_y2 <= rect_y2
+        )
+
+    # calculate area of a box
+    @staticmethod
+    def _box_area(box) -> float:
+        x1, y1, x2, y2 = box[:4]
+        return max(0.0, x2 - x1) * max(0.0, y2 - y1)
+
+    # check if person is perfectly visible
+    def _is_person_correctly_visible(self, people, faces, target_rectangle) -> bool:
+        if not people and not faces:
+            self.print_log("Cannot take photo! No person detected.", "warn")
+            return False
+        if people and not faces:
+            self.print_log("Cannot take photo! Either too close or the face is obstructed", "warn")
+            return False
+        if not people and faces:
+            self.print_log("Cannot take photo! The person must face the camera and the entire body must be visible",
+                           "warn")
+            return False
+
+        # check if person and face is inside the target rectangle (green rectangle)
+
+        # TODO: select correct person
+        is_person_in_rectangle = self._is_box_inside_rectangle(people[0], target_rectangle)
+        is_face_in_rectangle = self._is_box_inside_rectangle(faces[0], target_rectangle)
+
+        if not is_person_in_rectangle or not is_face_in_rectangle:
+            self.print_log("Cannot take photo! The person has to be inside the rectangle.", "warn")
+            return False
+
+        # TODO: select correct person
+        area_person = self._box_area(people[0])
+        if area_person < MIN_PERSON_AREA:
+            self.print_log(
+                f"Cannot take photo! The person is too far away. (Current area: {area_person:.0f}, must be over {MIN_PERSON_AREA:.0f})",
+                "warn")
+            return False
+
+        return True
+
 
     def _setup_channels(self):
         person_model_path = os.path.join("weights", "yolov8n.pt")
@@ -67,7 +130,7 @@ class VisionNode(NodeWrapper):
         self._state = "countdown"
         self._countdown_end = time.monotonic() + self._countdown_s
         self._last_logged_second = None
-        self.print_log(f"Taking picture in {self._countdown_s:.0f} s", "info")
+        self.print_log(f"Trying to take a picture in {self._countdown_s:.0f} s", "info")
 
     def _image_callback(self, image: Image) -> None:
         # Drop frames while inference is still running
@@ -84,20 +147,27 @@ class VisionNode(NodeWrapper):
             )
 
             # draw box where person is supposed to stand
-
             frame = self._person_recognition.annotated
             height, width = frame.shape[:2]
 
-            box_width = 150  # adjust these to set the box size
-            box_height = 400
-            x1 = (width - box_width) // 2
-            y1 = (height - box_height) // 2
-            x2 = x1 + box_width
-            y2 = y1 + box_height
+            x1 = (width - BOX_WIDTH) // 2
+            y1 = (height - BOX_HEIGHT) // 2
+            x2 = x1 + BOX_WIDTH
+            y2 = y1 + BOX_HEIGHT
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
             # Publish image with boxes drawn
+            target_rectangle = (x1, y1, x2, y2)
+
+            """
+            if people:
+                area = self._box_area(people[0])
+                if area > 30000:
+                    self.print_log(f"Person area: {area:.0f} px²", "info")
+            """
+
+            # publish image with boxes drawn
             # self._face_recognition.publish_results(image)
             self._person_recognition.publish_results(image)
 
@@ -105,6 +175,13 @@ class VisionNode(NodeWrapper):
             now = time.monotonic()
 
             if self._state == "countdown":
+                # return to idle state if the person is not standing in front of the camera properly
+                if not self._is_person_correctly_visible(people, faces, target_rectangle):
+                    self.print_log("Countdown cancelled!", "warn")
+                    self._state = "idle"
+                    return
+
+
                 remaining = self._countdown_end - now
                 if remaining > 0:
                     second = int(remaining) + 1
@@ -118,11 +195,14 @@ class VisionNode(NodeWrapper):
             # CAPTURE
             if self._state == "waiting_for_person":
                 # check if person is actually facing the camera
-                if faces and people:
+                if self._is_person_correctly_visible(people, faces, target_rectangle):
                     self.save_image()
                     self._state = "idle"
                 elif now > self._wait_end:
-                    self.print_log("No person in frame, capture cancelled", "warn")
+                    self.print_log(
+                        "No person and face inside the target box, capture cancelled",
+                        "warn",
+                    )
                     self._result_pub.publish(String(data=""))  # empty = failed
                     self._state = "idle"
 
