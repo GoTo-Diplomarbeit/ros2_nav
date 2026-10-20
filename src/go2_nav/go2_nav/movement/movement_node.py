@@ -57,21 +57,25 @@ class MovementNode(NodeWrapper):
         command_to_send = copy.deepcopy(self._last_command)
         yaw = self.movement_backend.get_yaw()
 
-        # for returning the angular values in the log
-        # if yaw is not None:
-        # self.node.get_logger().info(
-        # f"Korrektur aktiv -> YAW: {yaw:.3f}")
+        # Check if last command is Twist with 0 0 0, 0 0 0
+        if self._last_command == Twist():
+            command_to_send = Twist()  # Send one 0 command to stop
+        else:
+            # for returning the angular values in the log
+            # if yaw is not None:
+            # self.node.get_logger().info(
+            # f"Korrektur aktiv -> YAW: {yaw:.3f}")
 
-        if abs(self._last_command.angular.z) < 0.01:
-            if self._target_yaw is not None:
-                if yaw is not None:
-                    error_yaw = self._target_yaw - yaw
-                    true_error = math.atan2(math.sin(error_yaw), math.cos(error_yaw))
-                    command_to_send.angular.z += true_error * self._kp
+            if abs(self._last_command.angular.z) < 0.01:
+                if self._target_yaw is not None:
+                    if yaw is not None:
+                        error_yaw = self._target_yaw - yaw
+                        true_error = math.atan2(math.sin(error_yaw), math.cos(error_yaw))
+                        command_to_send.angular.z += true_error * self._kp
 
-                    # needed to read the target and the error
-                    # self.node.get_logger().info(
-                    # f"Korrektur aktiv -> TARGET: {self._target_yaw:.3f} | YAW: {yaw:.3f} | TRUE_ERROR: {true_error:.3f}")
+                        # needed to read the target and the error
+                        # self.node.get_logger().info(
+                        # f"Korrektur aktiv -> TARGET: {self._target_yaw:.3f} | YAW: {yaw:.3f} | TRUE_ERROR: {true_error:.3f}")
 
         self.movement_backend.send(command_to_send)
 
