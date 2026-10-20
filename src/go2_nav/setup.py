@@ -27,7 +27,7 @@ setup(
             'movement_node = go2_nav.movement.movement_node:main',
             'vision_node = go2_nav.vision.vision_node:main',
             'planner_node = go2_nav.planner.planner_node:main',
-            'camera_node = go2_nav.communication.camera_node:main',
+            'web_server_node = go2_nav.communication.server.web_server_node:main',
             'state_node = go2_nav.state.state_node:main',
         ],
     },
