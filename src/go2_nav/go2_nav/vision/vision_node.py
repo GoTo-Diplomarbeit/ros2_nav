@@ -28,9 +28,11 @@ class VisionNode(NodeWrapper):
 
 
     def _setup_channels(self):
+        person_model_path = os.path.join("weights", "yolov8n.pt")
+        os.makedirs(os.path.dirname(person_model_path), exist_ok=True)
         self._person_recognition = ImageRecognition(
             self.node,
-            "yolov8n.pt"
+            person_model_path
         )
 
         self._face_recognition = ImageRecognition(
