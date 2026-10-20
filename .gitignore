@@ -16,3 +16,4 @@
 
 # Python bytecode caches (created automatically when Python runs)
 __pycache__/
+/weights/

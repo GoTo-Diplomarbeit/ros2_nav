@@ -12,6 +12,8 @@
 
 # ROS 2 Jazzy's compiled packages are built against NumPy 1.x
 numpy<2
+# colcon-core needs setuptools < 80
+setuptools<80
 opencv-python<4.12
 
 # Real-robot backend (Go2Backend). Imported lazily, so the simulator does not need it.

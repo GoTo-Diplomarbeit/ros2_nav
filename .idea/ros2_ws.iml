@@ -11,6 +11,7 @@
       <excludeFolder url="file://$MODULE_DIR$/build" />
       <excludeFolder url="file://$MODULE_DIR$/install" />
       <excludeFolder url="file://$MODULE_DIR$/log" />
+      <excludeFolder url="file://$MODULE_DIR$/weights" />
     </content>
     <orderEntry type="jdk" jdkName="~/venvs/go2" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
