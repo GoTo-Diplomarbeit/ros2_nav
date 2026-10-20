@@ -12,7 +12,7 @@ class ImageRecognition:
         self.results = []
         self.annotated = None
         # Optional: publish annotated images to view in rviz / rqt_image_view
-        self._debug_pub = node.create_publisher(Image, "/vision/people_debug", 1)
+        self._debug_pub = node.create_publisher(Image, "/vision/person_recognition", 1)
 
     def get_results(self, image):
         # clear previous
