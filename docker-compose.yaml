@@ -1,0 +1,18 @@
+services:
+  # Developer build
+  dev:
+    # Build using the Dockerfile
+    build:
+      context: . # Use the project folder as context to have it accessible for copying and the Dockerfile
+      target: dev # Target dev as base
+    # Mount the volumes
+    volumes:
+      - .:/ws # Mount the project folder inside docker under /ws
+    stdin_open: true # Keep the terminal open after building
+    tty: true # Give the building an interactive terminal
+
+# release:
+#   build:
+#     context: .
+#     target: release
+#   command: python3 main.py
