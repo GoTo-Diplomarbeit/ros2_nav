@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-    <name>go2_nav</name>
+    <name>GoTo</name>
     <version>0.0.1</version>
     <description>Go2 mapping and navigation</description>
     <maintainer email="peter.promok07@htl-salzburg.ac.at">Peter Promok</maintainer>
