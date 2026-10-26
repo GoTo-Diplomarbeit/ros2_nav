@@ -6,10 +6,10 @@
 # Idea folder
 .idea/*
 !.idea/codeStyles/
-!.idea/dictionaries/
+!.idea/runConfigurations/
 !.idea/vcs.xml
 !.idea/modules.xml
-!.idea/runConfigurations/
+!.idea/.name
 
 # Custom Scripts
 /scripts/
