@@ -52,12 +52,31 @@ COPY /src/goto/package.xml .
 # Install every package declared inside the file
 RUN rosdep install --from-paths . --ignore-src -r -y
 
+# ---------------------------------------
+# | Clone and build the unitree_go2_sim |
+# ---------------------------------------
+# Install Gazebo Harmonic and the ROS-Gazebo bridge
+RUN apt-get install -y ros-jazzy-ros-gz ros-jazzy-ros2controlcli ros-jazzy-ros2-controllers
+# Clone the repository into the src folder of its own workspace
+RUN git clone --recursive https://github.com/GoTo-Diplomarbeit/unitree_go2_ros2 /unitree_ws/src/unitree_go2_ros2
+# Switch to the workspace folder
+WORKDIR /unitree_ws
+# Install all required packages
+RUN rosdep install --from-paths src --ignore-src -r -y
+# Build the unitree_go2_ros2 project
+RUN . /opt/ros/jazzy/setup.sh && colcon build
+
 # ------------------
 # | Finished setup |
 # ------------------
 
-# -- Source ROS automatically in every interactive terminal
-RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
+# Open terminals in the project folder
+WORKDIR /ws
 
-# -- Open a terminal when executing docker
-ENTRYPOINT ["bash"]
+# -- Source ROS, the unitree workspace and your own project automatically in every interactive terminal
+RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
+RUN echo "source /unitree_ws/install/setup.bash" >> /root/.bashrc
+RUN echo "source /ws/install/setup.bash 2>/dev/null || true" >> /root/.bashrc
+
+# -- Open a terminal when executing docker (can be overridden by other commands)
+CMD ["bash"]

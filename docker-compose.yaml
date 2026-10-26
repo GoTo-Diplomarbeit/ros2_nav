@@ -8,9 +8,14 @@ services:
     # Mount the volumes
     volumes:
       - .:/ws # Mount the project folder inside docker under /ws
+      - /tmp/.X11-unix:/tmp/.X11-unix
     # Publish port 8000 for app communication
     ports:
       - "8000:8000"
+    environment:
+      - DISPLAY=${DISPLAY}
+    devices:
+      - /dev/dri:/dev/dri
     stdin_open: true # Keep the terminal open after building
     tty: true # Give the building an interactive terminal
 
