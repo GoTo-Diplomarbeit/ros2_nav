@@ -3,7 +3,7 @@ import time
 from datetime import datetime
 
 import cv2
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CompressedImage
 from std_msgs.msg import Empty, String
 
 from go2_nav.node_utils import node_runner
@@ -65,6 +65,9 @@ class VisionNode(NodeWrapper):
         )
         self._result_pub = self.node.create_publisher(String, "/vision/picture_result", 10)
 
+        self._people_debug_pub = self.node.create_publisher(
+            CompressedImage, "/vision/people_debug/compressed", 1)
+
     # this starts the photo mode
     def _on_trigger(self, _msg: Empty) -> None:
         if self._state != "idle":
@@ -109,7 +112,13 @@ class VisionNode(NodeWrapper):
 
             # Publish image with boxes drawn
             # self._face_recognition.publish_results(image)
-            self._person_recognition.publish_results(image)
+            ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            if ok:
+                msg = CompressedImage()
+                msg.header = image.header
+                msg.format = "jpeg"
+                msg.data = jpg.tobytes()
+                self._people_debug_pub.publish(msg)
 
             # --- Capture state machine ---
             now = time.monotonic()

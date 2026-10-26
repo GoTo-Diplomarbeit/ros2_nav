@@ -5,12 +5,13 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import CompressedImage
 
 from go2_nav.communication.server import register_routes
-from go2_nav.communication.server.routes import app_websocket, front_camera
+from go2_nav.communication.server.routes import app_websocket, front_camera, people_debug_camera
 from go2_nav.communication.server.web_server import WebServer
 from go2_nav.node_utils import node_runner
 from go2_nav.node_utils.node_wrapper import NodeWrapper
 
 CAMERA_TOPIC = "/rgb_image/compressed"
+PEOPLE_DEBUG_TOPIC = "/vision/people_debug/compressed"
 
 # Speed limits, so a bug in the app can never send a huge speed
 MAX_LINEAR = 0.5  # m/s
@@ -36,6 +37,8 @@ class WebServerNode(NodeWrapper):
     def _setup_channels(self, *args, **kwargs):
         # Camera -> front camera route
         self.node.create_subscription(CompressedImage, CAMERA_TOPIC, front_camera.update_image, 1)
+
+        self.node.create_subscription(CompressedImage, PEOPLE_DEBUG_TOPIC, people_debug_camera.update_image, 1)
 
         # Publisher for the movement commands of the app
         self.cmd_pub = self.node.create_publisher(Twist, "planner_cmd_vel", 10)

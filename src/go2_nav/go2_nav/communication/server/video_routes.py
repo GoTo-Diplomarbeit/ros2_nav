@@ -53,8 +53,8 @@ class StreamRoute(RouteWrapper):
     Serves the front camera as an mjpeg stream.
     """
 
-    def __init__(self, camera: FrontCamera) -> None:
-        super().__init__("/stream.mjpg", ["GET"])
+    def __init__(self, camera: FrontCamera, path: str = "/stream.mjpg") -> None:
+        super().__init__(path, ["GET"])
         self._camera = camera
 
     async def on_request(self, request: Request) -> Response:
