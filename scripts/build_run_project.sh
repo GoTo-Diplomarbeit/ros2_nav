@@ -17,7 +17,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 # into ~/.local together with PyTorch (step 4b). setuptools >= 80 dropped an option
 # 'colcon build --symlink-install' needs (error: option --uninstall not recognized).
 # Only affects the build - the nodes still find ~/.local packages when they run.
-PYTHONNOUSERSITE=1 colcon build --symlink-install --packages-select go2_nav
+PYTHONNOUSERSITE=1 colcon build --symlink-install --packages-select goto
 source install/setup.bash
 
-ros2 launch go2_nav bringup.launch.py log_level:=warn
+ros2 launch goto bringup.launch.py log_level:=warn

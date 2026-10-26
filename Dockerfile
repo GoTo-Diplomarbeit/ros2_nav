@@ -3,7 +3,7 @@ FROM ros:jazzy AS dev
 LABEL authors="Peter Promok"
 
 # -- Refresh package list
-RUN apt-get update
+RUN apt-get update && rosdep update
 
 # ----------------------------------------
 # | Install the required python packages |
@@ -29,8 +29,9 @@ ENV CYCLONEDDS_HOME=/cyclonedds/install
 WORKDIR /ws
 # Copy requirements.txt to the container workspace
 COPY requirements.txt .
-# Install the required python packages using break-system-packages
-RUN pip install --break-system-packages -r requirements.txt
+# Install the required python packages, with a persistent pip cache
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --break-system-packages -r requirements.txt
 
 # -- Add the ROS python folders to Python's search path via a .pth file (so PyCharm finds rclpy etc.)
 RUN printf "/opt/ros/jazzy/lib/python3.12/site-packages\n/opt/ros/jazzy/local/lib/python3.12/dist-packages\n" > /usr/local/lib/python3.12/dist-packages/ros.pth
@@ -41,9 +42,22 @@ ENV PYTHONPATH=/opt/ros/jazzy/lib/python3.12/site-packages:/opt/ros/jazzy/local/
 ENV LD_LIBRARY_PATH=/opt/ros/jazzy/lib
 ENV ROS_DISTRO=jazzy
 
+# --------------------------------------
+# | Install the required ros2 packages |
+# --------------------------------------
+# Switch to the ws directory
+WORKDIR /ws
+# Copy the package.xml file to docker
+COPY /src/goto/package.xml .
+# Install every package declared inside the file
+RUN rosdep install --from-paths . --ignore-src -r -y
+
 # ------------------
 # | Finished setup |
 # ------------------
+
+# -- Source ROS automatically in every interactive terminal
+RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
 
 # -- Open a terminal when executing docker
 ENTRYPOINT ["bash"]

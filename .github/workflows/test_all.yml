@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout go2_nav
+      - name: Checkout goto
         uses: actions/checkout@v4
         with:
-          path: go2_ws/src/go2_nav
+          path: go2_ws/src/goto
 
       - name: Set up locale
         run: |
@@ -74,4 +74,4 @@ jobs:
           source /opt/ros/jazzy/setup.bash
           source go2_ws/install/setup.bash
           python3 -m pip install --user pytest
-          python3 -m pytest go2_ws/src/go2_nav/test --tb=short
+          python3 -m pytest go2_ws/src/goto/test --tb=short

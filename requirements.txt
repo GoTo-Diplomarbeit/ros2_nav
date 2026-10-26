@@ -29,6 +29,7 @@ fastapi
 starlette
 uvicorn
 zeroconf
+uvicorn[standard]
 
 # Person and face recognition (go2_nav/vision/image_recognition.py): YOLO models.
 # Large: pulls in PyTorch (a few GB).
