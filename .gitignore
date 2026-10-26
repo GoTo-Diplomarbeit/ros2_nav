@@ -7,8 +7,6 @@
 .idea/*
 !.idea/codeStyles/
 !.idea/runConfigurations/
-!.idea/vcs.xml
-!.idea/modules.xml
 !.idea/.name
 
 # Custom Scripts
