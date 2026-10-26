@@ -67,6 +67,15 @@ RUN rosdep install --from-paths . --ignore-src -r -y
 # Build the unitree_go2_ros2 project
 RUN . /opt/ros/jazzy/setup.sh && colcon build
 
+# -- Add the ROS python folders to Python's search path via a .pth file (so PyCharm finds rclpy etc.)
+RUN printf "/opt/ros/jazzy/lib/python3.12/site-packages\n/opt/ros/jazzy/local/lib/python3.12/dist-packages\n" > /usr/local/lib/python3.12/dist-packages/ros.pth
+
+# -- Add env variables for packages which are installed via ros2 rather than pip
+ENV AMENT_PREFIX_PATH=/opt/ros/jazzy
+ENV PYTHONPATH=/opt/ros/jazzy/lib/python3.12/site-packages:/opt/ros/jazzy/local/lib/python3.12/dist-packages
+ENV LD_LIBRARY_PATH=/opt/ros/jazzy/lib
+ENV ROS_DISTRO=jazzy
+
 # ------------------
 # | Finished setup |
 # ------------------
