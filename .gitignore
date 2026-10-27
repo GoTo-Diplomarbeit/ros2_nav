@@ -6,13 +6,8 @@
 # Idea folder
 .idea/*
 !.idea/codeStyles/
-!.idea/dictionaries/
-!.idea/vcs.xml
-!.idea/modules.xml
 !.idea/runConfigurations/
-
-# Custom Scripts
-/scripts/
+!.idea/.name
 
 # Python bytecode caches (created automatically when Python runs)
 __pycache__/
