@@ -14,11 +14,8 @@ jobs:
       - name: Checkout goto
         uses: actions/checkout@v4
 
-      - name: Start Docker Compose environment
-        run: docker compose up --build -d --wait
-
       - name: Run CI tests
-        run: docker compose run --rm ci
+        run: docker compose run --build --rm ci
 
       - name: Show logs on failure
         if: failure()
