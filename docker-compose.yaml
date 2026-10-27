@@ -10,7 +10,7 @@ services:
     volumes:
       - .:/ws # Mount the project folder inside docker under /ws
       - /tmp/.X11-unix:/tmp/.X11-unix
-      - ${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.docker.xauth:ro
+      - ${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.docker.xauth
     environment:
       - DISPLAY=${DISPLAY}
       - XAUTHORITY=/tmp/.docker.xauth
