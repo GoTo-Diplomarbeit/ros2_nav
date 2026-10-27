@@ -68,14 +68,17 @@ Pass the world's file name (without `.sdf`) as `world:=`:
 ros2 launch unitree_go2_sim unitree_go2_launch.py world:=school_with_person
 ```
 
-The helper scripts take the same argument:
+The helper scripts run in the dev container and take the same argument:
 
 ```bash
-# Simulator only
-scripts/launch_gazebo_with_lidar.sh world:=school_with_person
+# Simulator only (--disable_lidar / --disable_rviz work too)
+scripts/launch_gazebo.sh world:=school_with_person
 
-# Simulator + SLAM + Nav2 + teleop: first argument = SLAM backend, second = world
-scripts/run_sim_mapping.sh rtabmap school_with_person
+# Simulator + RTAB-Map navigation + teleop
+scripts/build_run_sim_mapping.sh
+
+# Build the goto package and start its nodes, mapping and navigation
+scripts/build_run_project.sh
 ```
 
 A full path to any `.sdf` file works too: `world:=/home/<you>/my_world.sdf`.
