@@ -67,6 +67,15 @@ RUN rosdep install --from-paths . --ignore-src -r -y
 # Build the unitree_go2_ros2 project
 RUN . /opt/ros/jazzy/setup.sh && colcon build
 
+# -- Add the ROS python folders to Python's search path via a .pth file (so PyCharm finds rclpy etc.)
+RUN printf "/opt/ros/jazzy/lib/python3.12/site-packages\n/opt/ros/jazzy/local/lib/python3.12/dist-packages\n" > /usr/local/lib/python3.12/dist-packages/ros.pth
+
+# -- Add env variables for packages which are installed via ros2 rather than pip
+ENV AMENT_PREFIX_PATH=/opt/ros/jazzy
+ENV PYTHONPATH=/opt/ros/jazzy/lib/python3.12/site-packages:/opt/ros/jazzy/local/lib/python3.12/dist-packages
+ENV LD_LIBRARY_PATH=/opt/ros/jazzy/lib
+ENV ROS_DISTRO=jazzy
+
 # ------------------
 # | Finished setup |
 # ------------------
@@ -78,6 +87,16 @@ RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
 RUN echo "source /unitree_go2_sim/install/setup.bash" >> /root/.bashrc
 # Source our project
 RUN echo "source /ws/install/setup.bash 2>/dev/null || true" >> /root/.bashrc
+
+# -- Work around a Python 3.12 crash in Ubuntu's sip4 package
+# PyCharm's skeleton generator imports the legacy top-level `sip` module. Ubuntu's
+# python3-sip 4.19.25 registers a Py_AtExit handler that calls PyMem_Free during
+# interpreter finalization; Python 3.12 has already finalized the GIL at that point,
+# so the process dies with SIGSEGV (exit code 139). PyCharm then reports "Couldn't
+# refresh skeletons" and leaves every import unresolved.
+# python3-sip cannot be removed because ROS rqt/rtabmap depend on it, so shadow it
+# with PyQt5's maintained sip implementation (see the shim for details).
+COPY scripts/fix/sip_shim.py /usr/local/lib/python3.12/dist-packages/sip.py
 
 # -- Open a terminal when executing docker (can be overridden by other commands)
 # Open terminals in the project folder
