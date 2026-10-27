@@ -19,19 +19,12 @@ services:
     stdin_open: true # Keep the terminal open after building
     tty: true # Give the build an interactive terminal
 
-  # Testing build
-  testing:
-    image: ghcr.io/goto-diplomarbeit/ros2_nav-dev:latest
-    network_mode: host
-    # Mount the volumes
+    # Testing build
+  ci:
+    build:
+      context: .
+      target: dev
     volumes:
-      - .:/ws # Mount the project folder inside docker under /ws
-      - /tmp/.X11-unix:/tmp/.X11-unix
-      - ${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.docker.xauth:ro
-    environment:
-      - DISPLAY=${DISPLAY}
-      - XAUTHORITY=/tmp/.docker.xauth
-    devices:
-      - /dev/dri:/dev/dri
-    stdin_open: true # Keep the terminal open after building
-    tty: true # Give the build an interactive terminal
+      - .:/ws
+    working_dir: /ws
+    command: pytest /ws/src/goto/test/

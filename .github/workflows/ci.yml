@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ master ]
+  push:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout goto
+        uses: actions/checkout@v4
+
+      - name: Start Docker Compose environment
+        run: docker compose up --build -d --wait
+
+      - name: Run CI tests
+        run: docker compose run --rm ci
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop services
+        if: always()
+        run: docker compose down
