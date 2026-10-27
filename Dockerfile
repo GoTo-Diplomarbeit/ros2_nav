@@ -88,6 +88,16 @@ RUN echo "source /unitree_go2_sim/install/setup.bash" >> /root/.bashrc
 # Source our project
 RUN echo "source /ws/install/setup.bash 2>/dev/null || true" >> /root/.bashrc
 
+# -- Work around a Python 3.12 crash in Ubuntu's sip4 package
+# PyCharm's skeleton generator imports the legacy top-level `sip` module. Ubuntu's
+# python3-sip 4.19.25 registers a Py_AtExit handler that calls PyMem_Free during
+# interpreter finalization; Python 3.12 has already finalized the GIL at that point,
+# so the process dies with SIGSEGV (exit code 139). PyCharm then reports "Couldn't
+# refresh skeletons" and leaves every import unresolved.
+# python3-sip cannot be removed because ROS rqt/rtabmap depend on it, so shadow it
+# with PyQt5's maintained sip implementation (see the shim for details).
+COPY scripts/fix/sip_shim.py /usr/local/lib/python3.12/dist-packages/sip.py
+
 # -- Open a terminal when executing docker (can be overridden by other commands)
 # Open terminals in the project folder
 WORKDIR /ws
