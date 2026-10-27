@@ -55,14 +55,15 @@ RUN rosdep install --from-paths . --ignore-src -r -y
 # ---------------------------------------
 # | Clone and build the unitree_go2_sim |
 # ---------------------------------------
-# Install Gazebo Harmonic and the ROS-Gazebo bridge
-RUN apt-get install -y ros-jazzy-ros-gz ros-jazzy-ros2controlcli ros-jazzy-ros2-controllers
-# Clone the repository into the src folder of its own workspace
-RUN git clone --recursive https://github.com/GoTo-Diplomarbeit/unitree_go2_ros2 /unitree_ws/src/unitree_go2_ros2
 # Switch to the workspace folder
-WORKDIR /unitree_ws
+WORKDIR /unitree_go2_sim
+# Changes whenever a new commit is pushed (invalidates the cache from here on)
+ADD https://api.github.com/repos/GoTo-Diplomarbeit/unitree_go2_ros2/git/refs/heads/main /tmp/repo_version
+
+# Clone the repository into the unitree_go2_sim folder of its own workspace
+RUN git clone --recursive https://github.com/GoTo-Diplomarbeit/unitree_go2_ros2 .
 # Install all required packages
-RUN rosdep install --from-paths src --ignore-src -r -y
+RUN rosdep install --from-paths . --ignore-src -r -y
 # Build the unitree_go2_ros2 project
 RUN . /opt/ros/jazzy/setup.sh && colcon build
 
@@ -70,13 +71,17 @@ RUN . /opt/ros/jazzy/setup.sh && colcon build
 # | Finished setup |
 # ------------------
 
-# Open terminals in the project folder
-WORKDIR /ws
-
-# -- Source ROS, the unitree workspace and your own project automatically in every interactive terminal
+# -- Source ROS, the unitree workspace and the goto project automatically in every interactive terminal
+# Source ROS2
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
-RUN echo "source /unitree_ws/install/setup.bash" >> /root/.bashrc
+# Source the simulator
+RUN echo "source /unitree_go2_sim/install/setup.bash" >> /root/.bashrc
+# Source our project
 RUN echo "source /ws/install/setup.bash 2>/dev/null || true" >> /root/.bashrc
 
 # -- Open a terminal when executing docker (can be overridden by other commands)
+# Open terminals in the project folder
+WORKDIR /ws
+
+# Run commands as bash (can be overriden eg. for using python)
 CMD ["bash"]

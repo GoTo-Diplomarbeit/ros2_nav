@@ -9,9 +9,6 @@
 !.idea/runConfigurations/
 !.idea/.name
 
-# Custom Scripts
-/scripts/
-
 # Python bytecode caches (created automatically when Python runs)
 __pycache__/
 /weights/
