@@ -15,8 +15,14 @@ from std_msgs.msg import String
 
 from goto.node_utils import node_runner
 from goto.node_utils.node_wrapper import NodeWrapper
-from goto.state.mission_state import (HEARTBEAT_PERIOD_S, MISSION_STATE_QOS, MISSION_STATE_REQUEST_TOPIC,
-                                         MISSION_STATE_TOPIC, State, parse_state)
+from goto.state.mission_state import (
+    HEARTBEAT_PERIOD_S,
+    MISSION_STATE_QOS,
+    MISSION_STATE_REQUEST_TOPIC,
+    MISSION_STATE_TOPIC,
+    State,
+    parse_state,
+)
 
 
 class StateNode(NodeWrapper):
@@ -58,7 +64,8 @@ class StateNode(NodeWrapper):
         self._state_publisher = self.node.create_publisher(String, MISSION_STATE_TOPIC, MISSION_STATE_QOS)
 
         self._request_subscription = self.node.create_subscription(
-            String, MISSION_STATE_REQUEST_TOPIC, self._on_request, 10)
+            String, MISSION_STATE_REQUEST_TOPIC, self._on_request, 10
+        )
 
         # Re-publish regularly, so the other nodes notice if this node dies
         self._heartbeat_timer = self.node.create_timer(HEARTBEAT_PERIOD_S, self._publish_state)
@@ -89,5 +96,5 @@ def main():
     node_runner.run_node(lambda: StateNode())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

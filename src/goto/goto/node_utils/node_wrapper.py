@@ -5,8 +5,13 @@ from typing import Callable, FrozenSet, Optional
 import rclpy
 from std_msgs.msg import String
 
-from goto.state.mission_state import (MISSION_STATE_QOS, MISSION_STATE_TOPIC, STATE_TIMEOUT_S, State,
-                                         parse_state)
+from goto.state.mission_state import (
+    MISSION_STATE_QOS,
+    MISSION_STATE_TOPIC,
+    STATE_TIMEOUT_S,
+    State,
+    parse_state,
+)
 
 
 class NodeWrapper(ABC):
@@ -103,8 +108,7 @@ class NodeWrapper(ABC):
         self.node.destroy_node()
 
     @abstractmethod
-    def _setup_channels(self, *args, **kwargs):
-        ...
+    def _setup_channels(self, *args, **kwargs): ...
 
     # --
     # -- Private class functions
@@ -130,7 +134,8 @@ class NodeWrapper(ABC):
         if self.state is not None and self._state_is_stale():
             self.node.get_logger().warning(
                 f"No mission state for {self.state_timeout_s:.1f} s - is the state node running? "
-                "Treating the state as unknown.")
+                "Treating the state as unknown."
+            )
             self._change_state(None)
 
         if self.is_active():

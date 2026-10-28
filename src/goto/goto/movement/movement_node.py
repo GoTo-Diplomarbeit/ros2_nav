@@ -8,7 +8,12 @@ from typing import Optional
 
 from geometry_msgs.msg import Twist
 
-from goto.movement.movement_backend import MovementBackendType, GazeboBackend, Go2Backend, NetworkInterface
+from goto.movement.movement_backend import (
+    GazeboBackend,
+    Go2Backend,
+    MovementBackendType,
+    NetworkInterface,
+)
 from goto.node_utils import node_runner
 from goto.node_utils.node_wrapper import NodeWrapper
 
@@ -16,7 +21,8 @@ from goto.node_utils.node_wrapper import NodeWrapper
 class MovementNode(NodeWrapper):
     """
     Bridge between planner output and the actual movement target.
-    Subscribes to /planner_cmd_vel; forwards to /cmd_vel for simulator use or translates into Sport Mode SDK calls for the real robot.
+    Subscribes to /planner_cmd_vel; forwards to /cmd_vel for simulator use or
+    translates into Sport Mode SDK calls for the real robot.
     """
 
     def __init__(self, movement_backend_type: Optional[MovementBackendType] = None) -> None:
@@ -45,7 +51,6 @@ class MovementNode(NodeWrapper):
     # --
 
     def _on_timer(self) -> None:
-
         """
         Method which is called every 0.05s, corrects the angular values of the robot
         """
@@ -72,9 +77,9 @@ class MovementNode(NodeWrapper):
                         true_error = math.atan2(math.sin(error_yaw), math.cos(error_yaw))
                         command_to_send.angular.z += true_error * self._kp
 
-                        # needed to read the target and the error
-                        # self.node.get_logger().info(
-                        # f"Korrektur aktiv -> TARGET: {self._target_yaw:.3f} | YAW: {yaw:.3f} | TRUE_ERROR: {true_error:.3f}")
+            # needed to read the target and the error
+            # self.node.get_logger().info(
+            # f"Korrektur aktiv -> TARGET: {self._target_yaw:.3f} | YAW: {yaw:.3f} | TRUE_ERROR: {true_error:.3f}")
 
         self.movement_backend.send(command_to_send)
 
@@ -93,9 +98,9 @@ class MovementNode(NodeWrapper):
             movement_backend_type = MovementBackendType[self.node.get_parameter("backend").value.upper()]
 
         # The selected movement backend type
-        self._planner_subscription = self.node.create_subscription(Twist,
-                                                                   "/planner_cmd_vel",
-                                                                   self._publish_movement_command, 10)
+        self._planner_subscription = self.node.create_subscription(
+            Twist, "/planner_cmd_vel", self._publish_movement_command, 10
+        )
 
         # User chose simulator -> Build simulator Node
         if movement_backend_type == MovementBackendType.GAZEBO:
@@ -134,5 +139,5 @@ def main():
     node_runner.run_node(lambda: MovementNode())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

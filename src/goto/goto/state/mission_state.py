@@ -22,18 +22,18 @@ class State(Enum):
     (std_msgs/String), so it can be read with "ros2 topic echo /mission_state".
     """
 
-    STARTUP = "STARTUP"                        # waiting for localization and Nav2
-    IDLE = "IDLE"                              # standing, waiting for a destination
-    CHECK_REQUEST = "CHECK_REQUEST"            # is the destination known and reachable?
-    WAIT_FOR_PERSON = "WAIT_FOR_PERSON"        # waiting for the person to be ready
-    GUIDING = "GUIDING"                        # walking to the destination with the person
+    STARTUP = "STARTUP"  # waiting for localization and Nav2
+    IDLE = "IDLE"  # standing, waiting for a destination
+    CHECK_REQUEST = "CHECK_REQUEST"  # is the destination known and reachable?
+    WAIT_FOR_PERSON = "WAIT_FOR_PERSON"  # waiting for the person to be ready
+    GUIDING = "GUIDING"  # walking to the destination with the person
     PERSON_FELL_BEHIND = "PERSON_FELL_BEHIND"  # paused, waiting for the person to catch up
-    PERSON_LOST = "PERSON_LOST"                # person gone for too long
-    BLOCKED = "BLOCKED"                        # Nav2 could not plan or reach the goal
-    ARRIVED = "ARRIVED"                        # destination reached
-    RETURNING_HOME = "RETURNING_HOME"          # walking back to the start point
-    EMERGENCY_STOP = "EMERGENCY_STOP"          # everything stopped, manual reset only
-    ERROR = "ERROR"                            # startup failed, manual restart only
+    PERSON_LOST = "PERSON_LOST"  # person gone for too long
+    BLOCKED = "BLOCKED"  # Nav2 could not plan or reach the goal
+    ARRIVED = "ARRIVED"  # destination reached
+    RETURNING_HOME = "RETURNING_HOME"  # walking back to the start point
+    EMERGENCY_STOP = "EMERGENCY_STOP"  # everything stopped, manual reset only
+    ERROR = "ERROR"  # startup failed, manual restart only
 
 
 def parse_state(text: str) -> Optional[State]:

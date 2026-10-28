@@ -9,13 +9,37 @@ on:
 jobs:
   test:
     runs-on: ubuntu-24.04
-
+    permissions:
+      contents: read
+      packages: read
     steps:
-      - name: Checkout goto
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Run CI tests
-        run: docker compose run --build --rm ci
+      - name: Log in to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Pull ci image
+        run: docker compose pull ci
+
+      - name: Lint
+        run: |
+          docker compose run --rm ci bash -c "
+            pip install ruff --break-system-packages &&
+            ruff check /ws/src/goto &&
+            ruff format --check /ws/src/goto
+          "
+
+      - name: Run build
+        run: |
+          docker compose run --rm ci bash -c "
+            source /opt/ros/jazzy/setup.bash &&
+            source /unitree_go2_sim/install/setup.bash &&
+            cd /ws &&
+            colcon build --symlink-install --packages-select goto
+          "
+
+      - name: Run tests
+        run: docker compose run --rm ci
 
       - name: Show logs on failure
         if: failure()
@@ -24,3 +48,7 @@ jobs:
       - name: Stop services
         if: always()
         run: docker compose down
+
+      - name: Log out of ghcr.io
+        if: always()
+        run: docker logout ghcr.io

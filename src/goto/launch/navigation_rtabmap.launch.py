@@ -70,29 +70,28 @@ def generate_launch_description():
         "delete_db",
         default_value="true",
         description="Delete ~/.ros/rtabmap.db at startup so the run maps from scratch. "
-                    "Set to false to extend the map from a previous run.",
+        "Set to false to extend the map from a previous run.",
     )
 
     use_navigation_argument = DeclareLaunchArgument(
         "use_nav2",
         default_value="true",
-        description="Also start Nav2. Set to false to map by teleop only, which leaves "
-                    "far more CPU for RTAB-Map.",
+        description="Also start Nav2. Set to false to map by teleop only, which leaves far more CPU for RTAB-Map.",
     )
 
     use_viewer_argument = DeclareLaunchArgument(
         "rtabmap_viz",
         default_value="false",
         description="Start RTAB-Map's own 3D viewer. It shows the live 3D cloud, the pose "
-                    "graph and loop closures, but it is expensive - leave it off on a "
-                    "throttled laptop and use rviz instead.",
+        "graph and loop closures, but it is expensive - leave it off on a "
+        "throttled laptop and use rviz instead.",
     )
 
     use_rviz_argument = DeclareLaunchArgument(
         "rviz",
         default_value="true",
         description="Start rviz2 with the 3D mapping config (rviz/rtabmap.rviz). "
-                    "Launch the simulator with rviz:=false so there is only one window.",
+        "Launch the simulator with rviz:=false so there is only one window.",
     )
 
     # --delete_db_on_start is a command line flag, not a ROS parameter, so it has to be
@@ -146,13 +145,15 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration("use_nav2")),
     )
 
-    return LaunchDescription([
-        delete_database_argument,
-        use_navigation_argument,
-        use_viewer_argument,
-        use_rviz_argument,
-        rtabmap_node,
-        rtabmap_viewer_node,
-        rviz_node,
-        navigation_launch,
-    ])
+    return LaunchDescription(
+        [
+            delete_database_argument,
+            use_navigation_argument,
+            use_viewer_argument,
+            use_rviz_argument,
+            rtabmap_node,
+            rtabmap_viewer_node,
+            rviz_node,
+            navigation_launch,
+        ]
+    )

@@ -1,6 +1,7 @@
 """
 Holds everything needed for the WebServer class.
 """
+
 import asyncio
 import threading
 from abc import ABC, abstractmethod

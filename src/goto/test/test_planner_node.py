@@ -3,8 +3,8 @@ import rclpy
 
 from goto.planner.planner_node import PlannerNode
 
-
 # -- Setup code
+
 
 # Reusable code that can be used in multiple tests
 @pytest.fixture
@@ -17,6 +17,7 @@ def rclpy_context():
 
 
 # -- Test code
+
 
 def test_planner_node_starts(rclpy_context):
     # The planner is still empty - this only guards against it crashing on startup

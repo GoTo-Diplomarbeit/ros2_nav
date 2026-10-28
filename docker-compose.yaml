@@ -5,7 +5,10 @@ x-gui: &gui
   volumes:
     - *ws
     - /tmp/.X11-unix:/tmp/.X11-unix
-    - ${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.docker.xauth:ro
+    - ${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.docker.xauth
+    # Rootless Docker leaves /sys empty, so libdrm can't detect the render node
+    # and Gazebo falls back to CPU rendering. Read-only mount fixes this.
+    - /sys:/sys:ro
   environment:
     - DISPLAY=${DISPLAY}
     - XAUTHORITY=/tmp/.docker.xauth

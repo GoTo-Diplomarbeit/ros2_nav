@@ -4,6 +4,7 @@ Tests for the mission state guard in NodeWrapper.
 A test node publishes states on /mission_state exactly like the state node would,
 and a small NodeWrapper inheritor records when _run() and the hooks are called.
 """
+
 import time
 
 import pytest
@@ -42,6 +43,7 @@ class GuardedNode(NodeWrapper):
 
 # -- Setup code
 
+
 @pytest.fixture
 def rclpy_context():
     # Runs before test
@@ -75,6 +77,7 @@ def make_executor(*wrappers_or_nodes):
 
 
 # -- Test code
+
 
 def test_no_state_means_inactive(state_publisher_node):
     test_node, _ = state_publisher_node

@@ -1,6 +1,7 @@
 """
 Camera routes and the app websocket (old VideoServer).
 """
+
 import asyncio
 
 import cv2
@@ -61,8 +62,7 @@ class StreamRoute(RouteWrapper):
         async def frames():
             while True:
                 if self._camera.snapshot_bytes:
-                    yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
-                           + self._camera.snapshot_bytes + b"\r\n")
+                    yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + self._camera.snapshot_bytes + b"\r\n")
                 await asyncio.sleep(0.05)
 
         return StreamingResponse(frames(), media_type="multipart/x-mixed-replace; boundary=frame")
