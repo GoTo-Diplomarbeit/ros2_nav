@@ -10,9 +10,9 @@ from goto.node_utils import node_runner
 from goto.node_utils.node_wrapper import NodeWrapper
 from goto.vision.image_recognition import ImageRecognition
 
-
 # TODO: only take picture when person is in a specific box
 # TODO: change timer logic
+
 
 class VisionNode(NodeWrapper):
     def __init__(self):
@@ -26,18 +26,14 @@ class VisionNode(NodeWrapper):
         elif msg_type == "error":
             self.node.get_logger().error(log)
 
-
     def _setup_channels(self):
         person_model_path = os.path.join("weights", "yolov8n.pt")
         os.makedirs(os.path.dirname(person_model_path), exist_ok=True)
-        self._person_recognition = ImageRecognition(
-            self.node,
-            person_model_path
-        )
+        self._person_recognition = ImageRecognition(self.node, person_model_path)
 
         self._face_recognition = ImageRecognition(
             self.node,
-            "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov8n-face.pt"
+            "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov8n-face.pt",
         )
 
         self._busy = False
@@ -60,9 +56,7 @@ class VisionNode(NodeWrapper):
         )
 
         # Trigger from the other node, and result back to it TODO::: get from the correct node
-        self._trigger_sub = self.node.create_subscription(
-            Empty, "/vision/take_picture", self._on_trigger, 10
-        )
+        self._trigger_sub = self.node.create_subscription(Empty, "/vision/take_picture", self._on_trigger, 10)
         self._result_pub = self.node.create_publisher(String, "/vision/picture_result", 10)
 
     # this starts the photo mode
@@ -81,15 +75,12 @@ class VisionNode(NodeWrapper):
             return
         self._busy = True
         try:
-
             # get people who are in frame and draw boxes around them
             faces = self._face_recognition.get_results(image)
 
             # merge boxes from faces and people together
             people = self._person_recognition.get_results(
-                self._person_recognition.bridge.cv2_to_imgmsg(
-                    self._face_recognition.annotated, encoding="bgr8"
-                )
+                self._person_recognition.bridge.cv2_to_imgmsg(self._face_recognition.annotated, encoding="bgr8")
             )
 
             # draw box where person is supposed to stand
@@ -105,7 +96,6 @@ class VisionNode(NodeWrapper):
             y2 = y1 + box_height
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
 
             # Publish image with boxes drawn
             # self._face_recognition.publish_results(image)
@@ -147,10 +137,9 @@ class VisionNode(NodeWrapper):
         self._result_pub.publish(String(data=path))
 
 
-
 def main():
     node_runner.run_node(lambda: VisionNode())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

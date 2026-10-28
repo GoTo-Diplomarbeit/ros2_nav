@@ -1,4 +1,9 @@
-from goto.communication.server.video_routes import AppWebsocket, FrontCamera, FrontCameraRoute, StreamRoute
+from goto.communication.server.video_routes import (
+    AppWebsocket,
+    FrontCamera,
+    FrontCameraRoute,
+    StreamRoute,
+)
 from goto.communication.server.web_server import WebServer
 
 # Shared objects, other nodes can import these

@@ -16,5 +16,5 @@ def main():
     node_runner.run_node(lambda: PlannerNode())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

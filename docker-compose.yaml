@@ -30,9 +30,6 @@ services:
   release:
     <<: *gui
     image: ghcr.io/goto-diplomarbeit/ros2_nav:latest
-    build:
-      context: .
-      target: release
 
   # Tests (uses the dev image)
   ci:

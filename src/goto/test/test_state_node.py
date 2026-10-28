@@ -4,12 +4,16 @@ import pytest
 import rclpy
 from std_msgs.msg import String
 
-from goto.state.mission_state import (MISSION_STATE_QOS, MISSION_STATE_REQUEST_TOPIC, MISSION_STATE_TOPIC,
-                                         State)
+from goto.state.mission_state import (
+    MISSION_STATE_QOS,
+    MISSION_STATE_REQUEST_TOPIC,
+    MISSION_STATE_TOPIC,
+    State,
+)
 from goto.state.state_node import StateNode
 
-
 # -- Setup code
+
 
 @pytest.fixture
 def rclpy_context():
@@ -28,8 +32,12 @@ def state_setup(rclpy_context):
     test_node = rclpy.create_node("test_helper")
     request_publisher = test_node.create_publisher(String, MISSION_STATE_REQUEST_TOPIC, 10)
     received_states = []
-    test_node.create_subscription(String, MISSION_STATE_TOPIC,
-                                  lambda message: received_states.append(message.data), MISSION_STATE_QOS)
+    test_node.create_subscription(
+        String,
+        MISSION_STATE_TOPIC,
+        lambda message: received_states.append(message.data),
+        MISSION_STATE_QOS,
+    )
 
     executor = rclpy.executors.SingleThreadedExecutor()
     executor.add_node(state_node.node)
@@ -49,6 +57,7 @@ def spin_for(executor, seconds):
 
 
 # -- Test code
+
 
 def test_publishes_initial_state(state_setup):
     state_node, _, received_states, executor = state_setup
@@ -93,6 +102,7 @@ def test_state_node_does_not_follow_itself(state_setup):
     state_node, _, _, _ = state_setup
 
     # follow_state=False -> the only subscription is the request topic
-    subscribed_topics = [topic for topic, _ in state_node.node.get_subscriber_names_and_types_by_node(
-        "mission_state", "/")]
+    subscribed_topics = [
+        topic for topic, _ in state_node.node.get_subscriber_names_and_types_by_node("mission_state", "/")
+    ]
     assert MISSION_STATE_TOPIC not in subscribed_topics

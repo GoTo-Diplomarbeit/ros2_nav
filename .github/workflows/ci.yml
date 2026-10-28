@@ -21,6 +21,23 @@ jobs:
       - name: Pull ci image
         run: docker compose pull ci
 
+      - name: Lint
+        run: |
+          docker compose run --rm ci bash -c "
+            pip install ruff --break-system-packages &&
+            ruff check /ws/src/goto &&
+            ruff format --check /ws/src/goto
+          "
+
+      - name: Run build
+        run: |
+          docker compose run --rm ci bash -c "
+            source /opt/ros/jazzy/setup.bash &&
+            source /unitree_go2_sim/install/setup.bash &&
+            cd /ws &&
+            colcon build --symlink-install --packages-select goto
+          "
+
       - name: Run tests
         run: docker compose run --rm ci
 
