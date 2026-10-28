@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-docker compose up -d release
+docker compose up -d --remove-orphans release
 docker compose exec release bash -c '
     cd /ws
     source /opt/ros/jazzy/setup.bash

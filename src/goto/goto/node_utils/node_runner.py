@@ -22,8 +22,11 @@ def run_node(node_wrapper_factory: Callable[[], NodeWrapper]) -> None:
     try:
         # Spin up the movement node indefinitely
         rclpy.spin(node_wrapper.node)
+    except KeyboardInterrupt:
+        pass
     finally:
         # Destroy the movement node when finished
         node_wrapper.destroy_node()
         # Shutdown rclpy
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
