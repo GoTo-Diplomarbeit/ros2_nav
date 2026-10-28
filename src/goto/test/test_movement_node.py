@@ -5,8 +5,8 @@ from geometry_msgs.msg import Twist
 from goto.movement.movement_backend import MovementBackendType
 from goto.movement.movement_node import MovementNode
 
-
 # -- Setup code
+
 
 # Reusable code that can be used in multiple tests
 @pytest.fixture
@@ -43,6 +43,7 @@ def movement_setup(rclpy_context):
 
 
 # -- Test code
+
 
 def test_sim_forwarding(movement_setup):
     movement_node, test_node, planner_publisher, received_movement_commands, executor = movement_setup

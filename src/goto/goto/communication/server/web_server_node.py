@@ -93,5 +93,5 @@ def main():
     node_runner.run_node(lambda: WebServerNode())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

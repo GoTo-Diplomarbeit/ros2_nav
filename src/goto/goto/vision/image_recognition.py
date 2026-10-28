@@ -6,9 +6,7 @@ from ultralytics import YOLO
 class ImageRecognition:
     def __init__(self, node, recognition_model):
         self.bridge = CvBridge()
-        self.model = YOLO(
-            recognition_model
-        )
+        self.model = YOLO(recognition_model)
         self.results = []
         self.frame = None
         self.results = []
