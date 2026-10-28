@@ -4,8 +4,7 @@ import time
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import CompressedImage
 
-from goto.communication.server import register_routes
-from goto.communication.server.routes import app_websocket, front_camera
+from goto.communication.server.routes import app_websocket, front_camera, register_routes
 from goto.communication.server.web_server import WebServer
 from goto.node_utils import node_runner
 from goto.node_utils.node_wrapper import NodeWrapper
