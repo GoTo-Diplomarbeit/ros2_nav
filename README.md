@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-Install Docker Compose (rootless):
+Install Docker Compose (rooted):
 
 ```shell
 bash scripts/setup/install-docker.sh
