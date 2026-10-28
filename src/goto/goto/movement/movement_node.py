@@ -38,8 +38,7 @@ class MovementNode(NodeWrapper):
         self._kp: float = 2.0
 
         # Creates a Timer which is called every 0.05s
-        self._timer = self.node.create_timer(0.05, self._on_timer)
-
+        self._timer = self.node.create_timer(0.01, self._on_timer)
 
     # --
     # -- Private class functions
@@ -95,8 +94,8 @@ class MovementNode(NodeWrapper):
 
         # The selected movement backend type
         self._planner_subscription = self.node.create_subscription(Twist,
-                                                                            "/planner_cmd_vel",
-                                                                            self._publish_movement_command, 10)
+                                                                   "/planner_cmd_vel",
+                                                                   self._publish_movement_command, 10)
 
         # User chose simulator -> Build simulator Node
         if movement_backend_type == MovementBackendType.GAZEBO:
