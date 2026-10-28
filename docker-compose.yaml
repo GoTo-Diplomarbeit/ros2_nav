@@ -26,7 +26,30 @@ services:
     stdin_open: true # Keep the terminal open after building
     tty: true # Give the build an interactive terminal
 
-    # Testing build
+  release:
+    image: ghcr.io/goto-diplomarbeit/ros2_nav:latest
+    network_mode: host
+    # Mount the volumes
+    volumes:
+      - .:/ws # Mount the project folder inside docker under /ws
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ${XAUTHORITY:-${HOME}/.Xauthority}:/tmp/.docker.xauth
+      # Rootless Docker leaves /sys empty in the container. libdrm then cannot tell
+      # /dev/dri/renderD128 is a *render* node (it reads /sys/dev/char/<maj>:<min>),
+      # so amdgpu tries to authenticate like a primary node, fails with
+      # "amdgpu_device_initialize failed / glx: failed to create dri3 screen" and
+      # Gazebo silently falls back to CPU rendering (llvmpipe). The host sysfs is
+      # read-only, so this only restores what GPU clients expect to find.
+      - /sys:/sys:ro
+    environment:
+      - DISPLAY=${DISPLAY}
+      - XAUTHORITY=/tmp/.docker.xauth
+    devices:
+      - /dev/dri:/dev/dri
+    stdin_open: true # Keep the terminal open after building
+    tty: true # Give the build an interactive terminal
+
+  # Testing build
   ci:
     build:
       context: .
