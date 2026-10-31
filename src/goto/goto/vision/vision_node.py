@@ -19,7 +19,7 @@ MIN_PERSON_AREA = 28000
 BOX_WIDTH = 250
 BOX_HEIGHT = 465
 
-# TODO: change timer logic
+# TODO: change timer logic a
 
 # TODO: only take photo of the closest person
 
