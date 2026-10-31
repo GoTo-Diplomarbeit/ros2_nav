@@ -6,9 +6,10 @@ import cv2
 from sensor_msgs.msg import Image
 from std_msgs.msg import Empty, String
 
-from go2_nav.node_utils import node_runner
-from go2_nav.node_utils.node_wrapper import NodeWrapper
-from go2_nav.vision.image_recognition import ImageRecognition
+from goto.node_utils import node_runner
+from goto.node_utils.node_wrapper import NodeWrapper
+from goto.state.mission_state import State
+from goto.vision.image_recognition import ImageRecognition
 
 # minimum box area of person
 # aka how close the person is to the camera
@@ -19,14 +20,17 @@ MIN_PERSON_AREA = 28000
 BOX_WIDTH = 250
 BOX_HEIGHT = 465
 
-# TODO: change timer logic a
+
+# TODO: change timer logic
 
 # TODO: only take photo of the closest person
-
 
 class VisionNode(NodeWrapper):
     def __init__(self):
         super().__init__("vision", self._setup_channels)
+
+        self.active_states = frozenset({State.WAIT_FOR_PERSON})
+
 
     def print_log(self, log, msg_type):
         if msg_type == "warn":
@@ -88,15 +92,17 @@ class VisionNode(NodeWrapper):
 
         return True
 
-
     def _setup_channels(self):
         person_model_path = os.path.join("weights", "yolov8n.pt")
         os.makedirs(os.path.dirname(person_model_path), exist_ok=True)
-        self._person_recognition = ImageRecognition(self.node, person_model_path)
+        self._person_recognition = ImageRecognition(
+            self.node,
+            person_model_path
+        )
 
         self._face_recognition = ImageRecognition(
             self.node,
-            "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov8n-face.pt",
+            "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov8n-face.pt"
         )
 
         self._busy = False
@@ -119,11 +125,16 @@ class VisionNode(NodeWrapper):
         )
 
         # Trigger from the other node, and result back to it TODO::: get from the correct node
-        self._trigger_sub = self.node.create_subscription(Empty, "/vision/take_picture", self._on_trigger, 10)
+        self._trigger_sub = self.node.create_subscription(
+            Empty, "/vision/take_picture", self._on_trigger, 10
+        )
         self._result_pub = self.node.create_publisher(String, "/vision/picture_result", 10)
 
     # this starts the photo mode
     def _on_trigger(self, _msg: Empty) -> None:
+        if not self.is_active():
+            self.print_log("Cannot capture, state is not active", "warn")
+            return
         if self._state != "idle":
             self.print_log("Capture already in progress, ignoring trigger", "warn")
             return
@@ -133,17 +144,20 @@ class VisionNode(NodeWrapper):
         self.print_log(f"Trying to take a picture in {self._countdown_s:.0f} s", "info")
 
     def _image_callback(self, image: Image) -> None:
-        # Drop frames while inference is still running
-        if self._busy:
+        # only activate when the current global state is WAIT_FOR_PERSON
+        if self._busy or not self.is_active():
             return
         self._busy = True
         try:
+
             # get people who are in frame and draw boxes around them
             faces = self._face_recognition.get_results(image)
 
             # merge boxes from faces and people together
             people = self._person_recognition.get_results(
-                self._person_recognition.bridge.cv2_to_imgmsg(self._face_recognition.annotated, encoding="bgr8")
+                self._person_recognition.bridge.cv2_to_imgmsg(
+                    self._face_recognition.annotated, encoding="bgr8"
+                )
             )
 
             # draw box where person is supposed to stand
@@ -157,7 +171,6 @@ class VisionNode(NodeWrapper):
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-            # Publish image with boxes drawn
             target_rectangle = (x1, y1, x2, y2)
 
             """
@@ -181,7 +194,6 @@ class VisionNode(NodeWrapper):
                     self._state = "idle"
                     return
 
-
                 remaining = self._countdown_end - now
                 if remaining > 0:
                     second = int(remaining) + 1
@@ -196,6 +208,7 @@ class VisionNode(NodeWrapper):
             if self._state == "waiting_for_person":
                 # check if person is actually facing the camera
                 if self._is_person_correctly_visible(people, faces, target_rectangle):
+                    # TODO: only crop person
                     self.save_image()
                     self._state = "idle"
                 elif now > self._wait_end:
@@ -221,5 +234,5 @@ def main():
     node_runner.run_node(lambda: VisionNode())
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
