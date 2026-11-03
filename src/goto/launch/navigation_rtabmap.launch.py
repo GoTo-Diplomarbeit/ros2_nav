@@ -9,6 +9,8 @@ This is a drop-in alternative to navigation.launch.py. The difference:
   navigation_rtabmap.launch.py  3D Velodyne cloud -> RTAB-Map -> a 3D map (OctoMap on
                                 /octomap_occupied_space, raw cloud on /cloud_map) AND a
                                 2D /map projected out of it for Nav2.
+                                pointcloud_to_laserscan still runs (with Nav2 only), for
+                                Nav2's live obstacle checks (/scan) - not for mapping.
 
 Why rviz shows the OctoMap and not /cloud_map: the Go2's trot rocks its body about
 +-7 deg, so some floor hits get placed in the air. /cloud_map keeps every point it
@@ -113,6 +115,30 @@ def generate_launch_description():
         arguments=[delete_database_flag],
     )
 
+    # Flat 2D /scan cut out of the 3D Velodyne cloud (only points 0.1 - 0.5 m above the
+    # floor). RTAB-Map itself does not need it, but Nav2 does: the collision monitor
+    # (last safety stage before /cmd_vel) and the costmaps' obstacle layers read /scan.
+    # Without it the collision monitor sees no sensor data, assumes it is blind and
+    # blocks every movement - the robot never moves to a "2D Goal Pose".
+    # Same settings as in navigation.launch.py (the slam_toolbox pipeline).
+    # Only started together with Nav2 (use_nav2) - nothing else reads /scan.
+    pointcloud_to_laserscan_node = Node(
+        package="pointcloud_to_laserscan",
+        executable="pointcloud_to_laserscan_node",
+        remappings=[("cloud_in", "/velodyne_points/points"), ("scan", "/scan")],
+        parameters=[
+            {
+                "target_frame": "base_footprint",
+                "min_height": 0.1,
+                "max_height": 0.5,
+                "range_max": 8.0,
+                "transform_tolerance": 0.2,
+            },
+            simulation_time_parameter,
+        ],
+        condition=IfCondition(LaunchConfiguration("use_nav2")),
+    )
+
     # RTAB-Map's own viewer (off by default). It gets the same parameter file so it
     # uses the same frames and inputs - the file's "/**" key applies it to both nodes.
     rtabmap_viewer_node = Node(
@@ -152,6 +178,7 @@ def generate_launch_description():
             use_viewer_argument,
             use_rviz_argument,
             rtabmap_node,
+            pointcloud_to_laserscan_node,
             rtabmap_viewer_node,
             rviz_node,
             navigation_launch,
