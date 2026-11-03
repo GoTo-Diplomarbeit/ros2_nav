@@ -73,11 +73,22 @@
     # ---- Where the map is stored --------------------------------------------
     # RTAB-Map keeps everything (all scans, all poses) in this database file - it IS
     # the saved map; the 2D and 3D maps can be rebuilt from it at any time.
-    # PITFALL: navigation_rtabmap.launch.py deletes it at startup by default
-    # (delete_db:=true, so every run maps from scratch). To keep a map, copy the file
-    # away BEFORE the next start:  cp ~/.ros/rtabmap.db ~/maps/<name>.db
-    # View it later with:          rtabmap-databaseViewer ~/maps/<name>.db
+    # scripts/run_sim_mapping.sh overrides the path (one map per world: ~/maps/<world>.db)
+    # and keeps it. PITFALL: started directly, navigation_rtabmap.launch.py uses this
+    # default path and DELETES it at startup (delete_db:=true).
+    # View a map with:             rtabmap-databaseViewer ~/maps/<name>.db
     database_path: ~/.ros/rtabmap.db
+
+    # ---- Continuing a saved map (localization mode) --------------------------
+    # Only used while Mem/IncrementalMemory is "false" (launch argument localization:=true).
+    Mem/InitWMWithAllNodes: "true"  # load the WHOLE map at startup. Default "false" loads
+                                    # only the last run's part, so areas mapped in earlier
+                                    # runs could not be used to find the robot.
+    RGBD/StartAtOrigin: "true"      # first guess: the robot stands where the map started
+                                    # (in the sim it always spawns at x=0, y=0 - the start
+                                    # of the first run). "false" = guess the spot where the
+                                    # last run ended, which is wrong after a sim restart.
+                                    # Wrong guess? Click "2D Pose Estimate" in rviz.
 
     # ---- Registration: ICP against the 3D cloud ------------------------------
     Reg/Strategy: "1"               # 0=visual, 1=ICP, 2=both. No camera -> ICP.
@@ -135,6 +146,7 @@
     Mem/STMSize: "30"               # the newest 30 keyframes are never used for loop
                                     # closure (they are "too recent" to count as a revisit)
     Mem/IncrementalMemory: "true"   # "true" = mapping, "false" = localisation only
+                                    # (the launch argument localization:= sets this)
 
     # ---- The 2D occupancy grid handed to Nav2 -------------------------------
     Grid/Sensor: "0"                # 0 = build the grid from the lidar cloud

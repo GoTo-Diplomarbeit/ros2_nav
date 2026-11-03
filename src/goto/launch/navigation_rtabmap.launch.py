@@ -21,10 +21,11 @@ Nav2 is unchanged and needs no edits: RTAB-Map publishes the same nav_msgs/Occup
 on /map and the same map -> odom transform that slam_toolbox did. It simply drops into
 the same slot in the TF tree.
 
-Easiest: scripts/run_sim_mapping.sh starts the simulator, this file and teleop in the
-right order. By hand, after the simulator is running:
+Easiest: scripts/run_sim_mapping.sh (mapping, use_nav2:=false + teleop) or
+scripts/run_sim_navigation.sh (localization on a saved map + Nav2) start the simulator
+and this file in the right order. By hand, after the simulator is running:
     ros2 launch unitree_go2_sim unitree_go2_launch.py static_map_to_odom:=false rviz:=false
-    ros2 launch go2_nav navigation_rtabmap.launch.py
+    ros2 launch goto navigation_rtabmap.launch.py
 
 Things that will bite you if you skip them:
 
@@ -35,10 +36,19 @@ Things that will bite you if you skip them:
   2. Never run this at the same time as navigation.launch.py. Both slam_toolbox and
      RTAB-Map publish map -> odom, which is the same conflict again.
 
-  3. The map is saved in ~/.ros/rtabmap.db (all scans + poses; the 2D and 3D maps can
-     be rebuilt from it). The default below DELETES it at startup so every run maps
-     from scratch - copy it away first to keep it. Pass delete_db:=false to continue
-     a previous map instead.
+  3. The map is saved in database_path (default ~/.ros/rtabmap.db; all scans + poses,
+     the 2D and 3D maps can be rebuilt from it). The default delete_db:=true DELETES it
+     at startup so every run maps from scratch - copy it away first to keep it.
+     scripts/run_sim_mapping.sh does NOT use these defaults: it keeps one map per
+     Gazebo world in ~/maps/<world>.db and continues it on every start.
+
+  3b. Continuing an existing map: start with delete_db:=false localization:=true.
+     RTAB-Map then only LOCATES the robot on the loaded map (no new map nodes). Once it
+     has found the robot (first message on /localization_pose), switch to mapping:
+         ros2 service call /rtabmap/set_mode_mapping std_srvs/srv/Empty
+     New areas are then added to the SAME map. Why not start in mapping mode directly:
+     a new run in mapping mode begins a separate, unconnected map, and without a camera
+     RTAB-Map has no way to find the old map again - the old map would disappear.
 
   4. To watch the 3D map build live, start the simulator with rviz:=false and let this
      launch own rviz instead (rviz:=true, the default here). The simulator's own rviz
@@ -59,6 +69,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -71,8 +82,22 @@ def generate_launch_description():
     delete_database_argument = DeclareLaunchArgument(
         "delete_db",
         default_value="true",
-        description="Delete ~/.ros/rtabmap.db at startup so the run maps from scratch. "
+        description="Delete the map file (database_path) at startup so the run maps from scratch. "
         "Set to false to extend the map from a previous run.",
+    )
+
+    database_path_argument = DeclareLaunchArgument(
+        "database_path",
+        default_value="~/.ros/rtabmap.db",
+        description="The map file RTAB-Map reads and writes.",
+    )
+
+    localization_argument = DeclareLaunchArgument(
+        "localization",
+        default_value="false",
+        description="true = only locate the robot on the loaded map, don't change the map "
+        "(Mem/IncrementalMemory=false). Switch to mapping at runtime with the "
+        "service /rtabmap/set_mode_mapping.",
     )
 
     use_navigation_argument = DeclareLaunchArgument(
@@ -102,6 +127,18 @@ def generate_launch_description():
         ["'--delete_db_on_start' if '", LaunchConfiguration("delete_db"), "' == 'true' else ''"]
     )
 
+    # Settings that come from the launch arguments, on top of rtabmap_params.yaml.
+    # ParameterValue(..., value_type=str): RTAB-Map's own parameters must be STRINGS -
+    # without it, launch would turn the text "false" into a boolean and RTAB-Map would
+    # reject the parameter.
+    rtabmap_launch_parameters = {
+        "database_path": LaunchConfiguration("database_path"),
+        "Mem/IncrementalMemory": ParameterValue(
+            PythonExpression(["'false' if '", LaunchConfiguration("localization"), "' == 'true' else 'true'"]),
+            value_type=str,
+        ),
+    }
+
     # The SLAM node itself. "scan_cloud" is RTAB-Map's generic 3D input topic, which we
     # point at the Velodyne. Odometry is not remapped because rtabmap_params.yaml sets
     # odom_frame_id, which makes RTAB-Map read odometry from TF instead of a topic.
@@ -110,7 +147,7 @@ def generate_launch_description():
         executable="rtabmap",
         name="rtabmap",
         output="screen",
-        parameters=[rtabmap_parameters_file, simulation_time_parameter],
+        parameters=[rtabmap_parameters_file, simulation_time_parameter, rtabmap_launch_parameters],
         remappings=[("scan_cloud", "/velodyne_points/points")],
         arguments=[delete_database_flag],
     )
@@ -146,7 +183,7 @@ def generate_launch_description():
         executable="rtabmap_viz",
         name="rtabmap_viz",
         output="screen",
-        parameters=[rtabmap_parameters_file, simulation_time_parameter],
+        parameters=[rtabmap_parameters_file, simulation_time_parameter, rtabmap_launch_parameters],
         remappings=[("scan_cloud", "/velodyne_points/points")],
         condition=IfCondition(LaunchConfiguration("rtabmap_viz")),
     )
@@ -174,6 +211,8 @@ def generate_launch_description():
     return LaunchDescription(
         [
             delete_database_argument,
+            database_path_argument,
+            localization_argument,
             use_navigation_argument,
             use_viewer_argument,
             use_rviz_argument,
