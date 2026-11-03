@@ -21,7 +21,7 @@ TIMEOUT = 0.5
 
 class WebServerNode(NodeWrapper):
     def __init__(self):
-        super().__init__("web_server_node", self._setup_channels, True)
+        super().__init__("web_server_node", self._setup_channels)
 
         # Create a webserver with default port 8000
         web_server = WebServer()
@@ -32,6 +32,11 @@ class WebServerNode(NodeWrapper):
         # Start the webserver
         web_server.start()
 
+        # Needed by the watchdog to detect a lost connection
+        self.last_cmd_time = 0.0
+        self.moving = False
+        self.node.create_timer(0.1, self._watchdog)
+
     def _setup_channels(self, *args, **kwargs):
         # Camera -> front camera route
         self.node.create_subscription(CompressedImage, CAMERA_TOPIC, front_camera.update_image, 1)
@@ -41,11 +46,6 @@ class WebServerNode(NodeWrapper):
 
         # Messages from the app end up in handle_command
         app_websocket.on_command = self.handle_command
-
-        # Needed by the watchdog to detect a lost connection
-        self.last_cmd_time = 0.0
-        self.moving = False
-        self.node.create_timer(0.1, self._watchdog)
 
     def handle_command(self, message: str) -> None:
         """
