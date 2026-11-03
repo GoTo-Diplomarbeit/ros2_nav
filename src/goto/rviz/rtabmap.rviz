@@ -117,7 +117,9 @@ Visualization Manager:
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 3
-      Size (m): 0.05000000074505806
+      # Cube edge length - must match octomap_tree_depth in rtabmap_params.yaml
+      # (16 = 0.05, 15 = 0.1, 14 = 0.2)
+      Size (m): 0.05
       Style: Boxes
       Topic:
         Depth: 5

@@ -167,3 +167,19 @@
     Grid/GroundIsObstacle: "false"  # the floor is free space, not an obstacle
     Grid/ClusterRadius: "0.5"       # obstacle points closer than this are grouped;
                                     # lone stray points are dropped as noise
+
+    # ---- The 3D OctoMap shown in rviz ----------------------------------------
+    # The OctoMap is stored as a tree: every level down halves the cube size, and the
+    # deepest level (16) is Grid/CellSize (5 cm). This setting picks which level is
+    # PUBLISHED on /octomap_occupied_space, /octomap_obstacles, ... :
+    #   16 = 5 cm cubes   15 = 10 cm cubes   14 = 20 cm cubes
+    # It only changes the 3D picture: the stored map and the 2D /map for Nav2 keep their
+    # 5 cm. (Changing Grid/CellSize instead would coarsen the Nav2 map too - doors would
+    # get narrower in the grid.)
+    # Kept at 16 (full 5 cm detail) on purpose. Tested with 15: the cubes get 10 cm, but
+    # merging 8 small cubes into one loses the ground/obstacle label - ~1400 floor cubes
+    # then showed up on /octomap_obstacles. Only lower it if rviz gets too slow.
+    # PITFALL: the rviz "Size (m)" of the OctoMap display must match (rviz/rtabmap.rviz),
+    # otherwise the cubes are drawn with gaps or overlap.
+    # NOTE: a plain ROS parameter -> a real number, NOT a string.
+    octomap_tree_depth: 16
