@@ -25,12 +25,13 @@ BOX_HEIGHT = 465
 
 # TODO: only take photo of the closest person
 
+
 class VisionNode(NodeWrapper):
     def __init__(self):
         super().__init__("vision", self._setup_channels)
 
+        # todo for later: add more states when the other states get implemented
         self.active_states = frozenset({State.WAIT_FOR_PERSON})
-
 
     def print_log(self, log, msg_type):
         if msg_type == "warn":
@@ -46,12 +47,7 @@ class VisionNode(NodeWrapper):
         box_x1, box_y1, box_x2, box_y2 = box[:4]
         rect_x1, rect_y1, rect_x2, rect_y2 = rectangle
         # check if box is inside rectangle
-        return (
-            box_x1 >= rect_x1
-            and box_y1 >= rect_y1
-            and box_x2 <= rect_x2
-            and box_y2 <= rect_y2
-        )
+        return box_x1 >= rect_x1 and box_y1 >= rect_y1 and box_x2 <= rect_x2 and box_y2 <= rect_y2
 
     # calculate area of a box
     @staticmethod
@@ -68,8 +64,9 @@ class VisionNode(NodeWrapper):
             self.print_log("Cannot take photo! Either too close or the face is obstructed", "warn")
             return False
         if not people and faces:
-            self.print_log("Cannot take photo! The person must face the camera and the entire body must be visible",
-                           "warn")
+            self.print_log(
+                "Cannot take photo! The person must face the camera and the entire body must be visible", "warn"
+            )
             return False
 
         # check if person and face is inside the target rectangle (green rectangle)
@@ -86,8 +83,10 @@ class VisionNode(NodeWrapper):
         area_person = self._box_area(people[0])
         if area_person < MIN_PERSON_AREA:
             self.print_log(
-                f"Cannot take photo! The person is too far away. (Current area: {area_person:.0f}, must be over {MIN_PERSON_AREA:.0f})",
-                "warn")
+                "Cannot take photo! The person is too far away."
+                + f" (Current area: {area_person:.0f}, must be over {MIN_PERSON_AREA:.0f})",
+                "warn",
+            )
             return False
 
         return True
@@ -95,14 +94,10 @@ class VisionNode(NodeWrapper):
     def _setup_channels(self):
         person_model_path = os.path.join("weights", "yolov8n.pt")
         os.makedirs(os.path.dirname(person_model_path), exist_ok=True)
-        self._person_recognition = ImageRecognition(
-            self.node,
-            person_model_path
-        )
+        self._person_recognition = ImageRecognition(self.node, person_model_path)
 
         self._face_recognition = ImageRecognition(
-            self.node,
-            "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov8n-face.pt"
+            self.node, "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov8n-face.pt"
         )
 
         self._busy = False
@@ -125,15 +120,14 @@ class VisionNode(NodeWrapper):
         )
 
         # Trigger from the other node, and result back to it TODO::: get from the correct node
-        self._trigger_sub = self.node.create_subscription(
-            Empty, "/vision/take_picture", self._on_trigger, 10
-        )
+        self._trigger_sub = self.node.create_subscription(Empty, "/vision/take_picture", self._on_trigger, 10)
         self._result_pub = self.node.create_publisher(String, "/vision/picture_result", 10)
 
     # this starts the photo mode
     def _on_trigger(self, _msg: Empty) -> None:
         if not self.is_active():
             self.print_log("Cannot capture, state is not active", "warn")
+            self._result_pub.publish(String(data=""))  # empty = failed
             return
         if self._state != "idle":
             self.print_log("Capture already in progress, ignoring trigger", "warn")
@@ -143,21 +137,30 @@ class VisionNode(NodeWrapper):
         self._last_logged_second = None
         self.print_log(f"Trying to take a picture in {self._countdown_s:.0f} s", "info")
 
+    # mission state left WAIT_FOR_PERSON (or went unknown): abort a running capture,
+    # otherwise it would resume with expired timers the next time the state is entered
+    def on_state_exit(self, state: State) -> None:
+        if self._state != "idle":
+            self.print_log(f"Mission state left {state.value}, capture cancelled", "warn")
+            self._cancel_capture()
+
+    # reset the capture and tell the requester that it failed
+    def _cancel_capture(self) -> None:
+        self._state = "idle"
+        self._result_pub.publish(String(data=""))  # empty = failed
+
     def _image_callback(self, image: Image) -> None:
         # only activate when the current global state is WAIT_FOR_PERSON
         if self._busy or not self.is_active():
             return
         self._busy = True
         try:
-
             # get people who are in frame and draw boxes around them
             faces = self._face_recognition.get_results(image)
 
             # merge boxes from faces and people together
             people = self._person_recognition.get_results(
-                self._person_recognition.bridge.cv2_to_imgmsg(
-                    self._face_recognition.annotated, encoding="bgr8"
-                )
+                self._person_recognition.bridge.cv2_to_imgmsg(self._face_recognition.annotated, encoding="bgr8")
             )
 
             # draw box where person is supposed to stand
@@ -189,9 +192,11 @@ class VisionNode(NodeWrapper):
 
             if self._state == "countdown":
                 # return to idle state if the person is not standing in front of the camera properly
+                # TODO: a single bad frame (YOLO detection flicker) cancels the whole countdown -
+                #  add a grace period (e.g. only cancel after N bad frames in a row / ~0.5 s)
                 if not self._is_person_correctly_visible(people, faces, target_rectangle):
                     self.print_log("Countdown cancelled!", "warn")
-                    self._state = "idle"
+                    self._cancel_capture()
                     return
 
                 remaining = self._countdown_end - now
@@ -216,8 +221,7 @@ class VisionNode(NodeWrapper):
                         "No person and face inside the target box, capture cancelled",
                         "warn",
                     )
-                    self._result_pub.publish(String(data=""))  # empty = failed
-                    self._state = "idle"
+                    self._cancel_capture()
 
         finally:
             self._busy = False
@@ -234,5 +238,5 @@ def main():
     node_runner.run_node(lambda: VisionNode())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -12,6 +12,7 @@
     <!-- Packages which are needed for both building and running -->
     <depend>rclpy</depend>
     <depend>geometry_msgs</depend>
+    <depend>sensor_msgs</depend>
     <depend>std_msgs</depend>
 
     <!-- Packages which are only needed for running -->
