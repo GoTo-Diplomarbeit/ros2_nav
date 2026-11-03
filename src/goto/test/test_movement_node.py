@@ -5,6 +5,7 @@ from geometry_msgs.msg import Twist
 from goto.movement.movement_backend import MovementBackendType
 from goto.movement.movement_node import MovementNode
 
+
 # -- Setup code
 
 
@@ -60,5 +61,37 @@ def test_sim_forwarding(movement_setup):
             break
 
     assert len(received_movement_commands) == 1
+
+    # Check linear movement
     assert received_movement_commands[0].linear.x == 0.5
+    assert received_movement_commands[0].linear.y == 0
+    assert received_movement_commands[0].linear.z == 0
+
+    # Check angular movement
+    assert received_movement_commands[0].angular.x == 0
+    assert received_movement_commands[0].angular.y == 0
     assert received_movement_commands[0].angular.z == 0.1
+
+
+def test_robot_stopping(movement_setup):
+    movement_node, test_node, planner_publisher, received_movement_commands, executor = movement_setup
+
+    # Publish a stop command
+    planner_publisher.publish(Twist())
+
+    for _ in range(10):
+        executor.spin_once(timeout_sec=0.1)
+        if received_movement_commands:
+            break
+
+    assert len(received_movement_commands) == 1
+
+    # Check linear movement
+    assert received_movement_commands[0].linear.x == 0
+    assert received_movement_commands[0].linear.y == 0
+    assert received_movement_commands[0].linear.z == 0
+
+    # Check angular movement
+    assert received_movement_commands[0].angular.x == 0
+    assert received_movement_commands[0].angular.y == 0
+    assert received_movement_commands[0].angular.z == 0
