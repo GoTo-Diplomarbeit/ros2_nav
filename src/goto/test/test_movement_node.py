@@ -5,7 +5,6 @@ from geometry_msgs.msg import Twist
 from goto.movement.movement_backend import MovementBackendType
 from goto.movement.movement_node import MovementNode
 
-
 # -- Setup code
 
 
