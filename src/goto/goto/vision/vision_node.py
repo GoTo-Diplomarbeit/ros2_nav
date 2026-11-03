@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 
 import cv2
+from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 from std_msgs.msg import Empty, String
 
@@ -20,6 +21,10 @@ MIN_PERSON_AREA = 28000
 BOX_WIDTH = 250
 BOX_HEIGHT = 465
 
+# a face belongs to a person if the face center lies inside the person box
+# and within this upper fraction of the person box (the head is at the top)
+FACE_TOP_FRACTION = 0.4
+
 
 # TODO: change timer logic
 
@@ -31,7 +36,7 @@ class VisionNode(NodeWrapper):
         super().__init__("vision", self._setup_channels)
 
         # todo for later: add more states when the other states get implemented
-        self.active_states = frozenset({State.WAIT_FOR_PERSON})
+        self.active_states = frozenset({State.REGISTER_PERSON})
 
     def print_log(self, log, msg_type):
         if msg_type == "warn":
@@ -55,6 +60,28 @@ class VisionNode(NodeWrapper):
         x1, y1, x2, y2 = box[:4]
         return max(0.0, x2 - x1) * max(0.0, y2 - y1)
 
+    # find the face that belongs to a person box (face center in the upper part of the person box)
+    @staticmethod
+    def _face_for_person(person, faces):
+        px1, py1, px2, py2 = person[:4]
+        head_limit = py1 + (py2 - py1) * FACE_TOP_FRACTION
+        best = None
+        for face in faces:
+            cx = (face[0] + face[2]) / 2
+            cy = (face[1] + face[3]) / 2
+            if px1 <= cx <= px2 and py1 <= cy <= head_limit:
+                if best is None or face[4] > best[4]:  # highest confidence wins
+                    best = face
+        return best
+
+    # pick the closest person (largest box) that has a matching face -> (person, face) or (None, None)
+    def _select_person(self, people, faces):
+        for person in sorted(people, key=self._box_area, reverse=True):
+            face = self._face_for_person(person, faces)
+            if face is not None:
+                return person, face
+        return None, None
+
     # check if person is perfectly visible
     def _is_person_correctly_visible(self, people, faces, target_rectangle) -> bool:
         if not people and not faces:
@@ -69,18 +96,21 @@ class VisionNode(NodeWrapper):
             )
             return False
 
-        # check if person and face is inside the target rectangle (green rectangle)
+        # only use a face that actually belongs to the person (avoids pairing person A with face B)
+        person, face = self._select_person(people, faces)
+        if person is None:
+            self.print_log("Cannot take photo! The detected face does not belong to a detected person.", "warn")
+            return False
 
-        # TODO: select correct person
-        is_person_in_rectangle = self._is_box_inside_rectangle(people[0], target_rectangle)
-        is_face_in_rectangle = self._is_box_inside_rectangle(faces[0], target_rectangle)
+        # check if person and face is inside the target rectangle (green rectangle)
+        is_person_in_rectangle = self._is_box_inside_rectangle(person, target_rectangle)
+        is_face_in_rectangle = self._is_box_inside_rectangle(face, target_rectangle)
 
         if not is_person_in_rectangle or not is_face_in_rectangle:
             self.print_log("Cannot take photo! The person has to be inside the rectangle.", "warn")
             return False
 
-        # TODO: select correct person
-        area_person = self._box_area(people[0])
+        area_person = self._box_area(person)
         if area_person < MIN_PERSON_AREA:
             self.print_log(
                 "Cannot take photo! The person is too far away."
@@ -94,11 +124,16 @@ class VisionNode(NodeWrapper):
     def _setup_channels(self):
         person_model_path = os.path.join("weights", "yolov8n.pt")
         os.makedirs(os.path.dirname(person_model_path), exist_ok=True)
-        self._person_recognition = ImageRecognition(self.node, person_model_path)
+        self._person_recognition = ImageRecognition(person_model_path)
 
         self._face_recognition = ImageRecognition(
-            self.node, "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov8n-face.pt"
+            "https://github.com/akanametov/yolo-face/releases/download/1.0.0/yolov8n-face.pt"
         )
+
+        self._bridge = CvBridge()
+        self._frame = None  # last clean camera frame (used when saving the photo)
+        # annotated image (faces + people + target rectangle) to view in rviz / rqt_image_view
+        self._debug_pub = self.node.create_publisher(Image, "/vision/person_recognition", 1)
 
         self._busy = False
 
@@ -137,7 +172,7 @@ class VisionNode(NodeWrapper):
         self._last_logged_second = None
         self.print_log(f"Trying to take a picture in {self._countdown_s:.0f} s", "info")
 
-    # mission state left WAIT_FOR_PERSON (or went unknown): abort a running capture,
+    # mission state left REGISTER_PERSON (or went unknown): abort a running capture,
     # otherwise it would resume with expired timers the next time the state is entered
     def on_state_exit(self, state: State) -> None:
         if self._state != "idle":
@@ -150,21 +185,22 @@ class VisionNode(NodeWrapper):
         self._result_pub.publish(String(data=""))  # empty = failed
 
     def _image_callback(self, image: Image) -> None:
-        # only activate when the current global state is WAIT_FOR_PERSON
+        # only activate when the current global state is REGISTER_PERSON
         if self._busy or not self.is_active():
             return
         self._busy = True
         try:
-            # get people who are in frame and draw boxes around them
-            faces = self._face_recognition.get_results(image)
+            # run both models on the same clean frame (never on an image with boxes drawn on it)
+            frame = self._bridge.imgmsg_to_cv2(image, desired_encoding="bgr8")
+            self._frame = frame
+            faces = self._face_recognition.get_results(frame)
+            people = self._person_recognition.get_results(frame)
 
-            # merge boxes from faces and people together
-            people = self._person_recognition.get_results(
-                self._person_recognition.bridge.cv2_to_imgmsg(self._face_recognition.annotated, encoding="bgr8")
-            )
+            # merge: draw face and person boxes onto one copy of the frame
+            annotated = self._face_recognition.draw(frame.copy())
+            annotated = self._person_recognition.draw(annotated)
 
             # draw box where person is supposed to stand
-            frame = self._person_recognition.annotated
             height, width = frame.shape[:2]
 
             x1 = (width - BOX_WIDTH) // 2
@@ -172,7 +208,7 @@ class VisionNode(NodeWrapper):
             x2 = x1 + BOX_WIDTH
             y2 = y1 + BOX_HEIGHT
 
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
             target_rectangle = (x1, y1, x2, y2)
 
@@ -184,8 +220,9 @@ class VisionNode(NodeWrapper):
             """
 
             # publish image with boxes drawn
-            # self._face_recognition.publish_results(image)
-            self._person_recognition.publish_results(image)
+            out = self._bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
+            out.header = image.header
+            self._debug_pub.publish(out)
 
             # --- Capture state machine ---
             now = time.monotonic()
@@ -229,7 +266,7 @@ class VisionNode(NodeWrapper):
     def save_image(self):
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         path = os.path.join(self._save_dir, f"person_{stamp}.jpg")
-        cv2.imwrite(path, self._face_recognition.frame)  # use `annotated` to include the boxes
+        cv2.imwrite(path, self._frame)  # clean frame, without boxes
         self.print_log(f"Saved {path}", "info")
         self._result_pub.publish(String(data=path))
 
