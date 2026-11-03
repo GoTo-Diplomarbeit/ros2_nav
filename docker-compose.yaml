@@ -17,6 +17,16 @@ x-gui: &gui
   stdin_open: true
   tty: true
 
+# GUI + NVIDIA GPU passthrough; host needs nvidia-container-toolkit (can't live in the image)
+x-nvidia: &nvidia
+  <<: *gui
+  environment:
+    - DISPLAY=${DISPLAY}
+    - XAUTHORITY=/tmp/.docker.xauth
+    # Default is compute-only; "all" injects the NVIDIA OpenGL/EGL libs so Gazebo skips llvmpipe
+    - NVIDIA_DRIVER_CAPABILITIES=all
+  gpus: all
+
 services:
   # Developer build (build locally)
   dev:
@@ -29,6 +39,11 @@ services:
   # Prebuilt image (pull from GitHub)
   release:
     <<: *gui
+    image: ghcr.io/goto-diplomarbeit/ros2_nav:latest
+
+  # Prebuilt image with NVIDIA GPU
+  release-nvidia:
+    <<: *nvidia
     image: ghcr.io/goto-diplomarbeit/ros2_nav:latest
 
   # Tests (uses the dev image)

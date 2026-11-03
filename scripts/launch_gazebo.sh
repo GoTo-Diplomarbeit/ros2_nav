@@ -2,8 +2,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-docker compose up -d --remove-orphans release
-docker compose exec release bash -c '
+# Override with SERVICE=release-nvidia for GPU rendering (see README)
+SERVICE=${SERVICE:-release}
+
+docker compose up -d --remove-orphans "$SERVICE"
+docker compose exec "$SERVICE" bash -c '
     cd /ws
     source /opt/ros/jazzy/setup.bash
     source /unitree_go2_sim/install/setup.bash

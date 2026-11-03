@@ -14,6 +14,12 @@ Install hooks:
 bash scripts/setup/install-hooks.sh
 ```
 
+NVIDIA GPU only - install the NVIDIA Container Toolkit, then use `release-nvidia` instead of `release` (scripts: `SERVICE=release-nvidia bash scripts/...` or the `(nvidia)` run configs):
+
+```shell
+bash scripts/setup/install-nvidia.sh
+```
+
 ## Installation
 
 ```shell
