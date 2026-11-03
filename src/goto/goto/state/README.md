@@ -77,7 +77,7 @@ that comes `IDLE → CHECK_REQUEST → GUIDING → ARRIVED`.
 |-----------------------------|-------------------------------------------------------------|
 | `STARTUP`                   | planner (readiness checks)                                  |
 | `CHECK_REQUEST`             | planner (is the room reachable?)                            |
-| `WAIT_FOR_PERSON`           | vision (photo)                                              |
+| `REGISTER_PERSON`           | vision (photo)                                              |
 | `GUIDING`                   | planner, vision, lidar check                                |
 | `PERSON_FELL_BEHIND`        | planner, vision (turn 360°, compare with photo, play sound) |
 | `ARRIVED`, `RETURNING_HOME` | planner                                                     |

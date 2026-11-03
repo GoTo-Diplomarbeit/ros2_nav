@@ -4,7 +4,9 @@ set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 state="${1:-IDLE}"
 
-docker compose -f "$repo_root/docker-compose.yaml" exec -T release bash -c '
+source "$(dirname -- "${BASH_SOURCE[0]}")/_find_service.sh"
+
+docker compose -f "$repo_root/docker-compose.yaml" exec -T "$SERVICE" bash -c '
     set -e
     source /opt/ros/jazzy/setup.bash
     source /unitree_go2_sim/install/setup.bash

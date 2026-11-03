@@ -1,33 +1,24 @@
-from cv_bridge import CvBridge
-from sensor_msgs.msg import Image
+import numpy as np
 from ultralytics import YOLO
 
 
 class ImageRecognition:
-    def __init__(self, node, recognition_model):
-        self.bridge = CvBridge()
+    """Thin wrapper around a YOLO model that only detects class 0 (person / face, depending on the model)."""
+
+    def __init__(self, recognition_model, conf=0.5):
         self.model = YOLO(recognition_model)
+        self.conf = conf
         self.results = []
-        self.frame = None
-        self.results = []
-        self.annotated = None
-        # Optional: publish annotated images to view in rviz / rqt_image_view
-        self._debug_pub = node.create_publisher(Image, "/vision/person_recognition", 1)
+        self._raw = None  # ultralytics Results of the last detection, used for drawing
 
-    def get_results(self, image):
-        # clear previous
-        self.results = []
-        frame = self.bridge.imgmsg_to_cv2(image, desired_encoding="bgr8")
-        self.frame = frame
-        results = self.model(frame, classes=[0], conf=0.5, verbose=False)[0]
-
-        for box in results.boxes:
-            x1, y1, x2, y2 = box.xyxy[0].tolist()
-            self.results.append((x1, y1, x2, y2, float(box.conf[0])))
-        self.annotated = results.plot()
+    # run detection on a clean BGR frame; returns [(x1, y1, x2, y2, conf), ...]
+    def get_results(self, frame: np.ndarray):
+        self._raw = self.model(frame, classes=[0], conf=self.conf, verbose=False)[0]
+        self.results = [(*box.xyxy[0].tolist(), float(box.conf[0])) for box in self._raw.boxes]
         return self.results
 
-    def publish_results(self, image):
-        out = self.bridge.cv2_to_imgmsg(self.annotated, encoding="bgr8")
-        out.header = image.header
-        self._debug_pub.publish(out)
+    # draw the last detections onto `canvas` (does not run the model again) and return it
+    def draw(self, canvas: np.ndarray) -> np.ndarray:
+        if self._raw is None:
+            return canvas
+        return self._raw.plot(img=canvas)
