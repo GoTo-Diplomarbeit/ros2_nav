@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Pose, Twist
 from rclpy.node import Node
 from rclpy.publisher import Publisher
 from rclpy.qos import qos_profile_sensor_data
@@ -40,10 +40,13 @@ class MovementBackend(ABC):
     """
 
     @abstractmethod
-    def send(self, movement_command: Twist) -> None: ...
+    def send_movement_command(self, movement_command: Twist) -> None: ...
 
     @abstractmethod
     def get_yaw(self) -> Optional[float]: ...
+
+    @abstractmethod
+    def send_tilt_command(self, angle: float) -> None: ...
 
 
 class Go2Backend(MovementBackend):
@@ -69,7 +72,11 @@ class Go2Backend(MovementBackend):
         # TODO: Implement IMU Robot
         return None
 
-    def send(self, movement_command: Twist) -> None:
+    def send_tilt_command(self, angle: float) -> None:
+        # TODO: Implement Photo Pose Robot
+        return None
+
+    def send_movement_command(self, movement_command: Twist) -> None:
         # Translate the Twist command to sportClient Move
         self._sport_client.Move(movement_command.linear.x, movement_command.linear.y, movement_command.angular.z)
 
@@ -100,15 +107,19 @@ class GazeboBackend(MovementBackend):
     Implements movement backend for the simulator.
     """
 
-    def __init__(self, movement_command_publisher: Publisher, node: Node) -> None:
+    def __init__(self, movement_command_publisher: Publisher, pose_command_publisher: Publisher, node: Node) -> None:
         """
         Creates a Movement Backend for the gazebo simulator.
         Args:
             movement_command_publisher (Publisher):
+            pose_command_publisher (Publisher):
         """
 
         # Save the movement command publisher for the simulator in the class
         self._movement_command_publisher = movement_command_publisher
+
+        # Save the pose command publisher for the simulator in the class
+        self._pose_command_publisher = pose_command_publisher
 
         self._imu_reader = ImuReaderGazebo(node)
 
@@ -117,6 +128,12 @@ class GazeboBackend(MovementBackend):
 
     # Get the angle and position of the robot in the simulator
 
-    def send(self, movement_command: Twist) -> None:
+    def send_tilt_command(self, angle: float) -> None:
+        pose = Pose()
+        pose.orientation.y = math.sin(angle / 2.0)
+        pose.orientation.w = math.cos(angle / 2.0)
+        self._pose_command_publisher.publish(pose)
+
+    def send_movement_command(self, movement_command: Twist) -> None:
         # Forward the movement_command to the simulator
         self._movement_command_publisher.publish(movement_command)
