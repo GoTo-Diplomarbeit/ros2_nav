@@ -96,7 +96,9 @@ controller_server:
       yaw_goal_tolerance: 0.3
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.4
+      # 0.3 = CHAMP's top speed in the sim (gait.yaml); more only made the controller chase a speed
+      # the robot can't reach. The velocity smoother still allows 0.5. Raise both for the real Go2.
+      desired_linear_vel: 0.3
       lookahead_dist: 0.6
       min_lookahead_dist: 0.3
       max_lookahead_dist: 0.9

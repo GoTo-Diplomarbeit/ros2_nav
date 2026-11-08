@@ -1,51 +1,27 @@
 """
-Mapping and navigation with RTAB-Map instead of slam_toolbox.
+Mapping and navigation with RTAB-Map - the alternative to navigation.launch.py (slam_toolbox).
 
-This is a drop-in alternative to navigation.launch.py. The difference:
+  navigation.launch.py          Velodyne -> pointcloud_to_laserscan -> /scan -> slam_toolbox -> 2D /map
+  navigation_rtabmap.launch.py  Velodyne -> RTAB-Map -> 3D map (OctoMap) + 2D /map for Nav2
 
-  navigation.launch.py          3D Velodyne cloud -> pointcloud_to_laserscan -> flat
-                                /scan -> slam_toolbox -> 2D /map only.
+Nav2 needs no changes: RTAB-Map publishes the same /map and map -> odom transform as slam_toolbox.
+rviz shows the OctoMap instead of /cloud_map: the Go2's trot rocks the lidar by about 7 degrees,
+and only the OctoMap erases the wrong points this causes once a later beam passes through them.
 
-  navigation_rtabmap.launch.py  3D Velodyne cloud -> RTAB-Map -> a 3D map (OctoMap on
-                                /octomap_occupied_space, raw cloud on /cloud_map) AND a
-                                2D /map projected out of it for Nav2.
-
-Why rviz shows the OctoMap and not /cloud_map: the Go2's trot rocks its body about
-+-7 deg, so some floor hits get placed in the air. /cloud_map keeps every point it
-ever stored, those "streaks" included. The OctoMap ray-traces in 3D and erases a wrong
-point when a later beam passes through it (tested: 0.2 % wrong points vs 1.8 %).
-
-Nav2 is unchanged and needs no edits: RTAB-Map publishes the same nav_msgs/OccupancyGrid
-on /map and the same map -> odom transform that slam_toolbox did. It simply drops into
-the same slot in the TF tree.
-
-Easiest: scripts/run_sim_mapping.sh starts the simulator, this file and teleop in the
-right order. By hand, after the simulator is running:
+Usually started by scripts/build_run_sim_mapping.sh or build_run_sim_navigation.sh, which keep
+one map per world in maps/<world>.db. By hand, after the simulator:
     ros2 launch unitree_go2_sim unitree_go2_launch.py static_map_to_odom:=false rviz:=false
-    ros2 launch go2_nav navigation_rtabmap.launch.py
+    ros2 launch goto navigation_rtabmap.launch.py
 
-Things that will bite you if you skip them:
-
-  1. The simulator must NOT publish its own map -> odom transform, exactly as with
-     slam_toolbox - two publishers for one frame breaks TF. Always start it with
-     static_map_to_odom:=false.
-
-  2. Never run this at the same time as navigation.launch.py. Both slam_toolbox and
-     RTAB-Map publish map -> odom, which is the same conflict again.
-
-  3. The map is saved in ~/.ros/rtabmap.db (all scans + poses; the 2D and 3D maps can
-     be rebuilt from it). The default below DELETES it at startup so every run maps
-     from scratch - copy it away first to keep it. Pass delete_db:=false to continue
-     a previous map instead.
-
-  4. To watch the 3D map build live, start the simulator with rviz:=false and let this
-     launch own rviz instead (rviz:=true, the default here). The simulator's own rviz
-     config has no 3D map display, so two rviz windows would just mean one useless one.
-
-  5. Known issue: occasionally RTAB-Map starts, receives every scan but processes none
-     (no /info, empty map; cause not found yet). Check with "ros2 topic hz /info"
-     (~1 Hz when working) and restart this launch if it stays silent.
-     scripts/run_sim_mapping.sh detects and restarts it automatically.
+Pitfalls:
+  - By default the map file (database_path) is deleted at startup. Pass delete_db:=false to keep it.
+  - map -> odom may only have one publisher: start the simulator with static_map_to_odom:=false,
+    and never run this together with navigation.launch.py.
+  - Continuing a saved map: delete_db:=false localization:=true, and once the robot is found
+    (/localization_pose), call the service /rtabmap/set_mode_mapping. Starting in mapping mode
+    instead would begin a new map that isn't connected to the old one.
+  - Sometimes RTAB-Map starts but processes no scans (no /info, cause unknown) - restart it then.
+    The scripts do that automatically.
 """
 
 import os
@@ -57,6 +33,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -69,8 +46,20 @@ def generate_launch_description():
     delete_database_argument = DeclareLaunchArgument(
         "delete_db",
         default_value="true",
-        description="Delete ~/.ros/rtabmap.db at startup so the run maps from scratch. "
-        "Set to false to extend the map from a previous run.",
+        description="Delete the map file at startup, so the run maps from scratch (never with localization:=true).",
+    )
+
+    database_path_argument = DeclareLaunchArgument(
+        "database_path",
+        default_value="~/.ros/rtabmap.db",
+        description="The map file RTAB-Map loads and saves.",
+    )
+
+    localization_argument = DeclareLaunchArgument(
+        "localization",
+        default_value="false",
+        description="true = only find the robot on the loaded map, add nothing to it. "
+        "Switch to mapping later with the service /rtabmap/set_mode_mapping.",
     )
 
     use_navigation_argument = DeclareLaunchArgument(
@@ -94,11 +83,27 @@ def generate_launch_description():
         "Launch the simulator with rviz:=false so there is only one window.",
     )
 
-    # --delete_db_on_start is a command line flag, not a ROS parameter, so it has to be
-    # built as a conditional argument string rather than passed in the parameter file.
+    # --delete_db_on_start is a command line flag, not a ROS parameter. Never delete in localization
+    # mode - that would leave nothing to localize on.
     delete_database_flag = PythonExpression(
-        ["'--delete_db_on_start' if '", LaunchConfiguration("delete_db"), "' == 'true' else ''"]
+        [
+            "'--delete_db_on_start' if '",
+            LaunchConfiguration("delete_db"),
+            "' == 'true' and '",
+            LaunchConfiguration("localization"),
+            "' != 'true' else ''",
+        ]
     )
+
+    # Settings from the launch arguments, on top of rtabmap_params.yaml. value_type=str: RTAB-Map's
+    # own parameters must be strings, otherwise launch turns "false" into a boolean and RTAB-Map rejects it.
+    rtabmap_launch_parameters = {
+        "database_path": LaunchConfiguration("database_path"),
+        "Mem/IncrementalMemory": ParameterValue(
+            PythonExpression(["'false' if '", LaunchConfiguration("localization"), "' == 'true' else 'true'"]),
+            value_type=str,
+        ),
+    }
 
     # The SLAM node itself. "scan_cloud" is RTAB-Map's generic 3D input topic, which we
     # point at the Velodyne. Odometry is not remapped because rtabmap_params.yaml sets
@@ -108,13 +113,31 @@ def generate_launch_description():
         executable="rtabmap",
         name="rtabmap",
         output="screen",
-        parameters=[rtabmap_parameters_file, simulation_time_parameter],
+        parameters=[rtabmap_parameters_file, simulation_time_parameter, rtabmap_launch_parameters],
         remappings=[("scan_cloud", "/velodyne_points/points")],
         arguments=[delete_database_flag],
     )
 
-    # RTAB-Map's own viewer (off by default). It gets the same parameter file so it
-    # uses the same frames and inputs - the file's "/**" key applies it to both nodes.
+    # Flat /scan (points 0.1 - 0.5 m above the floor) for Nav2 only: without it the collision monitor
+    # sees no sensor data and blocks every movement. Same settings as in navigation.launch.py.
+    pointcloud_to_laserscan_node = Node(
+        package="pointcloud_to_laserscan",
+        executable="pointcloud_to_laserscan_node",
+        remappings=[("cloud_in", "/velodyne_points/points"), ("scan", "/scan")],
+        parameters=[
+            {
+                "target_frame": "base_footprint",
+                "min_height": 0.1,
+                "max_height": 0.5,
+                "range_max": 8.0,
+                "transform_tolerance": 0.2,
+            },
+            simulation_time_parameter,
+        ],
+        condition=IfCondition(LaunchConfiguration("use_nav2")),
+    )
+
+    # RTAB-Map's own viewer (off by default), with the same parameter file for the same frames and inputs
     rtabmap_viewer_node = Node(
         package="rtabmap_viz",
         executable="rtabmap_viz",
@@ -148,10 +171,13 @@ def generate_launch_description():
     return LaunchDescription(
         [
             delete_database_argument,
+            database_path_argument,
+            localization_argument,
             use_navigation_argument,
             use_viewer_argument,
             use_rviz_argument,
             rtabmap_node,
+            pointcloud_to_laserscan_node,
             rtabmap_viewer_node,
             rviz_node,
             navigation_launch,
