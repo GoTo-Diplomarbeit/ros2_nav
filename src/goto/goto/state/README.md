@@ -65,7 +65,7 @@ The full explanation, with a diagram of the planned flow, is in the main README:
 - ❌ There are no transition rules. Any valid state is accepted, even `IDLE` → `ARRIVED`.
 - ❌ No node has `active_states` set yet. `camera_node` isn't a `NodeWrapper` at all, so
   it can't follow the state.
-- ❌ `scripts/run_sim_mapping.sh` doesn't start the state node.
+- ❌ `scripts/build_run_sim_mapping.sh` doesn't start the state node.
 
 **Proposed next step:** `planner_node` takes over `STARTUP`. It checks that localization,
 Nav2 and the sensors are ready, then requests `IDLE`, or `ERROR` after a timeout. After

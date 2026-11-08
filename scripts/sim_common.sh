@@ -1,92 +1,144 @@
 #!/usr/bin/env bash
-# =============================================================================
-# sim_common.sh - shared parts of run_sim_mapping.sh and run_sim_navigation.sh
+# Shared code of build_run_sim_mapping.sh and build_run_sim_navigation.sh (loaded with "source").
 #
-# Not a script to run on its own: the two run scripts load it with "source", so both
-# start the simulator, RTAB-Map and the shutdown in exactly the same way.
+# Everything runs inside the Docker container. Started on the host, a script starts the
+# container and then runs itself again inside it (run_in_docker). Only the project folder
+# is shared with the host (it is /ws in the container), so maps and logs are kept there:
+#   maps/<world>.db        one RTAB-Map map per world (gitignored)
+#   log/sim_runs/<date>/   the logs of each run
 #
-# What a script must do after sourcing it:
-#   1. set WORLD, then call   setup_run            (ROS environments, log folder, map file)
-#   2. set its own trap:      trap <its cleanup> EXIT; trap 'exit 130' INT TERM HUP
-#   3. use start_simulator, start_rtabmap, watch_localization, stop_everything
-# =============================================================================
+# No "set -e" on purpose: the wait functions return error codes that the scripts check.
 
-# ---- Settings shared by both scripts ----------------------------------------
-# Sensors switched off in the simulator. Mapping AND navigation only need the Velodyne
-# (RTAB-Map + Nav2's /scan) plus IMU and leg data (odometry, can't be switched off).
-# Every camera/lidar is rendered by Gazebo and bridged to ROS, which costs a lot of CPU.
-# Only these two scripts turn them off; the simulator's defaults and the other scripts
-# keep all sensors on.
-#   disable_d455      RealSense depth camera (Micah's vision)
-#   disable_camera    mono camera (video stream to the app)
-#   disable_lidar_l1  Unitree L1 lidar (unused, the Velodyne is the mapping lidar)
-# PITFALL: vision_node and camera_node get no images in a run started by these scripts.
-# NOTE: "gui:=false" would save the Gazebo window's ~1-1.6 CPU cores, but the simulator
-# launch currently ignores it (declared, never used) - the window always opens.
+# Sensors the sim doesn't need to render for mapping/navigation (saves a lot of CPU): only the
+# Velodyne, IMU and leg data are used. vision_node/camera_node get no images in these runs.
 SIM_EXTRA_ARGS="disable_d455:=true disable_camera:=true disable_lidar_l1:=true"
-RTABMAP_ATTEMPTS=3    # how often to restart RTAB-Map if it gets stuck at startup
-MAP_DIR="$HOME/maps"  # one map per world: $MAP_DIR/<world>.db
-# -----------------------------------------------------------------------------
+RTABMAP_ATTEMPTS=3              # restarts if RTAB-Map gets stuck at startup
+RTABMAP_STOP_SECONDS=60         # time RTAB-Map gets to save the map (a running map update took 16 s)
+SERVICE="${SERVICE:-release}"   # Docker service; "release-nvidia" renders on the NVIDIA GPU
+WORLDS_DIR=/unitree_go2_sim/install/unitree_go2_description/share/unitree_go2_description/worlds
 
-# The repo root, found relative to THIS file, so it works wherever the repo is.
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # the project folder (/ws in the container)
+MAP_DIR="$REPO_DIR/maps"
 
-# Ids of what we started - the cleanup stops exactly these
+# Ids of what this run started, so the cleanup stops exactly these
 SIM_ID=""
-SLAM_ID=""
+RTABMAP_ID=""
 WATCHER_ID=""
 
-# ---- Setup ----------------------------------------------------------------------
+# Programs of which only one copy may run - two would fight over /map and map->odom.
+# "^" = start of the command line, so e.g. an editor that has "gz sim" in its title doesn't match.
+RUNNING_PATTERNS=(
+    "^gz sim"
+    "^[^ ]*rtabmap_slam/rtabmap"
+    "^[^ ]*slam_toolbox/[^ ]*slam_toolbox_node"
+    "^[^ ]*nav2_bt_navigator/bt_navigator"
+    "^[^ ]*python3 [^ ]*/teleop_twist_keyboard( |$)"
+)
 
-# Loads the ROS environments, refuses to run twice, creates the log folder and works
-# out the map file. Needs WORLD to be set. Sets LOG_DIR, MAP_NAME, MAP_FILE.
-setup_run() {
-    LOG_DIR="$HOME/.ros/log/go2_run_$(date +%Y-%m-%d_%H-%M-%S)"
-    mkdir -p "$LOG_DIR"
+# ---- Docker ---------------------------------------------------------------------
 
-    # One map file per world, named after the world: "school_with_person" or
-    # "/home/x/my_world.sdf" -> ~/maps/school_with_person.db / ~/maps/my_world.db
-    MAP_NAME="$(basename "$WORLD" .sdf)"
-    MAP_FILE="$MAP_DIR/$MAP_NAME.db"
+# Exits if a sim, SLAM, Nav2 or teleop is still running. On the host this also sees the
+# processes inside every container (release and release-nvidia).
+refuse_if_already_running() {
+    local running
+    running=$(pgrep -af "$(IFS='|'; echo "${RUNNING_PATTERNS[*]}")")
+    [[ -z "$running" ]] && return 0
+    echo "Still running from an earlier run:"
+    echo "$running" | cut -c1-120 | sed 's/^/    /'
+    echo "Stop it with Ctrl+C in its terminal. If that terminal is gone, stop it like this (the map is saved):"
+    echo "    sudo kill -INT -- -\$(pgrep -of '^bash /ws/scripts/build_run_sim')"
+    exit 1
+}
 
-    # Order matters: ROS itself, then the Go2 sim workspace, then this repo on top.
-    local setup_file
-    for setup_file in /opt/ros/jazzy/setup.bash "$HOME/go2_ws/install/setup.bash" "$REPO_DIR/install/setup.bash"; do
-        if [[ ! -f "$setup_file" ]]; then
-            echo "Missing $setup_file - has that workspace been built?"
-            exit 1
-        fi
-        source "$setup_file"
-    done
+# Sends Ctrl+C to the run script inside the container - to its whole process group, as a
+# terminal does, so teleop ends too. The script then stops everything and RTAB-Map saves the map.
+# No input/output: this runs when the terminal is already gone.
+stop_script_in_container() {
+    docker compose exec -T "$SERVICE" \
+        bash -c 'kill -INT -- -"$(pgrep -of "^bash /ws/scripts/build_run_sim")"' < /dev/null > /dev/null 2>&1
+}
 
-    # Only one copy may run: two simulators or two SLAM nodes both publish /map and
-    # map->odom and the map breaks. The patterns are anchored to the START of each
-    # command line ("^"), so they only match the real programs - not e.g. a terminal or
-    # editor whose command line just happens to contain the words "gz sim".
-    local already_running
-    already_running=$(pgrep -af "^gz sim|^[^ ]*rtabmap_slam/rtabmap|^[^ ]*slam_toolbox/[^ ]*slam_toolbox_node|^[^ ]*nav2_bt_navigator/bt_navigator|^[^ ]*python3 [^ ]*/teleop_twist_keyboard( |$)")
-    if [[ -n "$already_running" ]]; then
-        echo "Something from a previous run is still running:"
-        echo "$already_running" | sed 's/^/    /' | cut -c1-120
-        echo "Stop it first (Ctrl+C in its terminal), otherwise two copies fight over the map."
+# On the host: starts the container and runs the calling script inside it, with the same
+# arguments. Inside the container (/.dockerenv exists there) it returns at once.
+run_in_docker() {
+    [[ -f /.dockerenv ]] && return 0
+    refuse_if_already_running
+    cd "$REPO_DIR" || exit 1
+    docker compose up -d --remove-orphans "$SERVICE" || exit 1
+
+    # Closing this terminal doesn't stop the script inside the container (Docker doesn't pass
+    # that on), so do it ourselves
+    trap stop_script_in_container HUP TERM
+
+    # TZ: the container runs on UTC; ROS_DOMAIN_ID: keeps two sims on one network apart
+    docker compose exec \
+        -e TZ="$(cat /etc/timezone 2>/dev/null)" \
+        -e ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}" \
+        "$SERVICE" bash "/ws/scripts/$(basename "$0")" "$@"
+    exit $?
+}
+
+# The container runs as root, so the files it creates would belong to root on the host.
+# Give them the owner of the project folder. (With rootless Docker the folder already shows
+# as root here and nothing has to change.)
+give_files_back() {
+    local owner
+    owner=$(stat -c %u:%g "$REPO_DIR")
+    [[ "$owner" == "0:0" ]] && return 0
+    chown -R "$owner" "$MAP_DIR" "$REPO_DIR/log" "$REPO_DIR/build" "$REPO_DIR/install" 2>/dev/null
+    return 0
+}
+
+# Builds goto, so the run always uses the current code (about 2 s).
+build_goto() {
+    # A build made outside Docker links to host paths that don't exist in the container
+    if [[ -n "$(find "$REPO_DIR/install/goto" -xtype l -print -quit 2>/dev/null)" ]]; then
+        echo "build/ and install/ are from a build outside Docker. Delete them once: rm -rf build install log"
+        exit 1
+    fi
+    echo "Building goto ..."
+    if ! (cd "$REPO_DIR" && colcon build --symlink-install --packages-select goto) > "$LOG_DIR/build.log" 2>&1; then
+        tail -20 "$LOG_DIR/build.log"
+        echo "The build failed (log: $LOG_DIR/build.log)"
         exit 1
     fi
 }
 
-# ---- Process helpers ------------------------------------------------------------
+# Checks $WORLD, loads ROS, builds goto, creates the log folder and works out the map file.
+# Also sets the traps: Ctrl+C or a closed terminal -> exit -> stop_on_exit.
+# Sets LOG_DIR, MAP_NAME, MAP_FILE.
+setup_run() {
+    trap stop_on_exit EXIT
+    trap 'exit 130' INT TERM HUP
+    refuse_if_already_running   # again, in case the script was started inside the container
 
-# Start a command in the background in its OWN session ("setsid"), with its output
-# in a log file, and print its id.
-# Why a session: everything the launch file starts stays in that session - even
-# Gazebo's server and GUI, which put themselves into process groups of their own.
-# So "stop every process in session X" catches all of it, and nothing survives as
-# an orphan. The launch process's id is also the session id.
+    # Catch a wrong world name now, not after waiting minutes for the simulator
+    if [[ ! -f "$WORLD" && ! -f "$WORLDS_DIR/$WORLD.sdf" ]]; then
+        echo "Unknown world '$WORLD'. Available: $(ls "$WORLDS_DIR" | sed 's/\.sdf$//' | tr '\n' ' ')"
+        exit 1
+    fi
+
+    LOG_DIR="$REPO_DIR/log/sim_runs/$(date +%Y-%m-%d_%H-%M-%S)"
+    mkdir -p "$LOG_DIR"
+    MAP_NAME="$(basename "$WORLD" .sdf)"   # "default" -> default, "/ws/x/my_world.sdf" -> my_world
+    MAP_FILE="$MAP_DIR/$MAP_NAME.db"
+
+    source /opt/ros/jazzy/setup.bash
+    source /unitree_go2_sim/install/setup.bash   # the simulator, built into the Docker image
+    build_goto
+    source "$REPO_DIR/install/setup.bash"
+}
+
+# ---- Starting and stopping ----------------------------------------------------------
+
+# Starts a command in the background, in its own session, with its output in a log file.
+# Prints its id. Why a session: everything the launch starts stays in it (even Gazebo's
+# server and GUI), so stop_session can stop all of it and nothing is left over.
 start_in_background() {
     local log_file=$1; shift
     setsid "$@" < /dev/null > "$log_file" 2>&1 &
     local id=$!
-    # PITFALL: "&" returns a split second BEFORE setsid has created the new session.
-    # Checking on the session in that gap fails, so wait until it really exists.
+    # "&" returns a moment before setsid has created the session - wait until it exists
     for _ in $(seq 50); do
         [[ "$(ps -o sid= -p "$id" 2>/dev/null | tr -d ' ')" == "$id" ]] && break
         sleep 0.1
@@ -94,67 +146,86 @@ start_in_background() {
     echo "$id"
 }
 
-# Wait until one message arrives on a topic. Returns 0 = got one, 1 = timed out,
-# 2 = the launch we are waiting for has died, 130 = user pressed Ctrl+C.
+# Waits until a message arrives on a topic. Returns 0 = got one, 1 = timed out,
+# 2 = the launch with the given id has died.
 wait_for_message() {
     local topic=$1 max_seconds=$2 launch_id=$3
     local deadline=$((SECONDS + max_seconds))
     while (( SECONDS < deadline )); do
-        kill -0 "$launch_id" 2>/dev/null || return 2   # "kill -0" = only check it's alive
-        # "ros2 topic echo --once" exits as soon as one message arrives. It fails
-        # instantly while the topic doesn't exist yet, hence the loop.
-        timeout 5 ros2 topic echo "$topic" --once --field header.stamp > /dev/null 2>&1
-        local result=$?
-        (( result == 0 )) && return 0
-        (( result == 130 )) && return 130
+        kill -0 "$launch_id" 2>/dev/null || return 2   # "kill -0" only checks that it's alive
+        # Fails at once while the topic doesn't exist yet, hence the loop
+        timeout 5 ros2 topic echo "$topic" --once --field header.stamp > /dev/null 2>&1 && return 0
         sleep 1
     done
     return 1
 }
 
-# Stop every process in a session politely (SIGINT = like Ctrl+C, lets nodes shut
-# down cleanly - RTAB-Map writes the map file then), and force it (SIGKILL) if
-# anything is still alive after 15 s.
+# Stops every process of a session: first like Ctrl+C (RTAB-Map saves the map then),
+# by force after <max_seconds> (default 15). Returns 1 if it had to use force.
 stop_session() {
-    local session_id=$1
-    [[ -z "$session_id" ]] && return
-    pkill -INT -s "$session_id" 2>/dev/null || return   # -s = match by session
-    for _ in $(seq 15); do
-        pgrep -s "$session_id" > /dev/null || return
+    local session_id=$1 max_seconds=${2:-15}
+    [[ -z "$session_id" ]] && return 0
+    pkill -INT -s "$session_id" 2>/dev/null || return 0
+    for _ in $(seq "$max_seconds"); do
+        pgrep -s "$session_id" > /dev/null || return 0
         sleep 1
     done
     pkill -KILL -s "$session_id" 2>/dev/null
+    return 1
 }
 
-# Stops everything this run started (for the scripts' cleanup functions).
+# Stops everything this run started and says if the map may not have been saved.
+# Returns 0 = map saved (or RTAB-Map never started), 1 = RTAB-Map had to be killed,
+# 2 = RTAB-Map had already died during the run.
 stop_everything() {
-    echo
-    echo "Stopping everything (takes up to ~15 s) ..."
     [[ -n "$WATCHER_ID" ]] && kill "$WATCHER_ID" 2>/dev/null
-    stop_session "$SLAM_ID"
+    if [[ -z "$SIM_ID" ]]; then   # failed before anything was started
+        give_files_back
+        return 0
+    fi
+    local result=0
+    echo
+    echo "Stopping everything (saving the map can take up to a minute) ..."
+    if [[ -n "$RTABMAP_ID" ]] && ! kill -0 "$RTABMAP_ID" 2>/dev/null; then
+        result=2
+        echo "RTAB-Map had stopped by itself during the run - the map lacks what came after (see its log)."
+    elif ! stop_session "$RTABMAP_ID" "$RTABMAP_STOP_SECONDS"; then
+        result=1
+        echo "RTAB-Map had to be killed - the map may be incomplete."
+    fi
     stop_session "$SIM_ID"
-    echo "Done. Logs are in $LOG_DIR"
+    give_files_back
+    echo "Done. Logs: $LOG_DIR"
+    return $result
 }
 
-# ---- Starting the parts -----------------------------------------------------------
+# Messages a script wants to print after everything stopped. It gets stop_everything's result.
+# The mapping script defines its own; this one does nothing.
+after_stop() { :; }
 
-# Starts the simulator and waits until the lidar and the odometry are running.
-# Args: <rviz true|false> <step label, e.g. "[1/3]">.  Sets SIM_ID.
-# static_map_to_odom:=false - the SLAM node publishes map->odom, so the sim must not.
+# Runs whenever a run script ends (see setup_run). Ignores a second Ctrl+C, so the shutdown
+# can always finish.
+stop_on_exit() {
+    trap '' INT TERM HUP
+    stop_everything
+    after_stop $?
+}
+
+# Starts the simulator and waits until the lidar and the odometry run. Sets SIM_ID.
+# static_map_to_odom:=false - RTAB-Map publishes map->odom, so the sim must not.
+# rviz:=false - navigation_rtabmap.launch.py brings its own rviz.
 start_simulator() {
-    local sim_rviz=$1 step=$2
-    echo "$step Starting the simulator, world '$WORLD' (log: $LOG_DIR/sim.log)"
-    # $SIM_EXTRA_ARGS is deliberately NOT in quotes, so "a:=1 b:=2" becomes two arguments.
+    echo "[1/3] Starting the simulator, world '$WORLD' (log: $LOG_DIR/sim.log)"
+    # $SIM_EXTRA_ARGS without quotes on purpose, so "a:=1 b:=2" becomes two arguments
     SIM_ID=$(start_in_background "$LOG_DIR/sim.log" \
-        ros2 launch unitree_go2_sim unitree_go2_launch.py static_map_to_odom:=false rviz:="$sim_rviz" \
+        ros2 launch unitree_go2_sim unitree_go2_launch.py static_map_to_odom:=false rviz:=false \
         world:="$WORLD" $SIM_EXTRA_ARGS)
 
     echo "      waiting for the lidar ..."
     wait_for_message /velodyne_points/points 180 "$SIM_ID"
     case $? in
         0) ;;
-        130) exit 130 ;;
-        2) echo "      The simulator crashed. Last lines of its log:"; tail -15 "$LOG_DIR/sim.log"; exit 1 ;;
+        2) echo "      The simulator crashed:"; tail -15 "$LOG_DIR/sim.log"; exit 1 ;;
         *) echo "      No lidar data after 3 minutes. See $LOG_DIR/sim.log"; exit 1 ;;
     esac
     echo "      waiting for the robot's odometry ..."
@@ -162,55 +233,44 @@ start_simulator() {
     sleep 5   # give the robot a moment to finish standing up
 }
 
-# Starts navigation_rtabmap.launch.py (RTAB-Map + rviz [+ Nav2]) and waits until
-# RTAB-Map works. Args: <step label> <description> <launch arguments ...>. Sets SLAM_ID.
-# RTAB-Map sometimes starts but rejects every lidar scan and never produces a map
-# (cause not found yet). It is easy to detect: a working RTAB-Map publishes /info about
-# once per second, even while the robot stands still. If none arrives, the whole launch
-# is restarted.
+# Starts navigation_rtabmap.launch.py with this world's map and waits until RTAB-Map works.
+# Args: <description> <launch arguments ...>. Sets RTABMAP_ID.
+# RTAB-Map sometimes starts but processes no scans (cause not found yet). A working one
+# publishes /info about once per second, so if none arrives, the launch is restarted.
 start_rtabmap() {
-    local step=$1 description=$2; shift 2
-    local attempt slam_log result
+    local description=$1; shift
+    local attempt log_file
     for attempt in $(seq "$RTABMAP_ATTEMPTS"); do
-        slam_log="$LOG_DIR/rtabmap_attempt$attempt.log"
-        echo "$step Starting $description (log: $slam_log)"
-        SLAM_ID=$(start_in_background "$slam_log" ros2 launch goto navigation_rtabmap.launch.py \
+        log_file="$LOG_DIR/rtabmap_attempt$attempt.log"
+        echo "[2/3] Starting $description (log: $log_file)"
+        RTABMAP_ID=$(start_in_background "$log_file" ros2 launch goto navigation_rtabmap.launch.py \
             database_path:="$MAP_FILE" delete_db:=false "$@")
         echo "      waiting for RTAB-Map to process its first scans ..."
-        wait_for_message /info 30 "$SLAM_ID"
-        result=$?
-        (( result == 0 )) && return 0
-        (( result == 130 )) && exit 130
-        echo "      RTAB-Map is not producing a map (attempt $attempt/$RTABMAP_ATTEMPTS). Its last warnings:"
-        grep -E "WARN|ERROR" "$slam_log" | grep rtabmap | tail -3 | cut -c1-200 | sed 's/^/        /'
-        stop_session "$SLAM_ID"
-        SLAM_ID=""
-        if (( attempt == RTABMAP_ATTEMPTS )); then
-            echo "      Giving up. Please send the warnings above / $slam_log"
-            exit 1
-        fi
-        echo "      restarting it ..."
+        wait_for_message /info 30 "$RTABMAP_ID" && return 0
+
+        echo "      RTAB-Map processes no scans (attempt $attempt/$RTABMAP_ATTEMPTS). Its last warnings:"
+        grep -E "WARN|ERROR" "$log_file" | grep rtabmap | tail -3 | cut -c1-200 | sed 's/^/        /'
+        stop_session "$RTABMAP_ID" "$RTABMAP_STOP_SECONDS"   # it saves the loaded map when it stops
+        RTABMAP_ID=""
     done
+    echo "      Giving up. See $LOG_DIR"
+    exit 1
 }
 
-# Run in the BACKGROUND ("&"): waits until RTAB-Map (in localization mode) has found the
-# robot on the loaded map, then calls the given function once.
-# Arg: <function to call when found>.
+# Run in the background ("&"): waits until RTAB-Map (localization mode) has found the robot
+# on the loaded map, then calls the given function once.
 watch_localization() {
-    local on_found=$1
-    local started=$SECONDS hint_shown=false
-    while kill -0 "$SLAM_ID" 2>/dev/null; do
-        # RTAB-Map publishes /localization_pose (only in localization mode) every time it
-        # matched the current scan against the loaded map.
+    local on_found=$1 started=$SECONDS hint_shown=false
+    while kill -0 "$RTABMAP_ID" 2>/dev/null; do
+        # /localization_pose comes each time a scan matched the loaded map
         if timeout 5 ros2 topic echo /localization_pose --once --field header.stamp > /dev/null 2>&1; then
             "$on_found"
             return
         fi
         if [[ $hint_shown == false ]] && (( SECONDS - started > 30 )); then
             hint_shown=true
-            echo
             echo ">>> Robot not found on the map yet. It is assumed to start where the map started."
-            echo "    In rviz: click \"2D Pose Estimate\" and drag on the robot's real position/direction."
+            echo "    If it doesn't, click \"2D Pose Estimate\" in rviz on its real position."
         fi
     done
 }

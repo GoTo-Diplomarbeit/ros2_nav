@@ -70,25 +70,14 @@
     # before dropping that scan.
     wait_for_transform: 0.3
 
-    # ---- Where the map is stored --------------------------------------------
-    # RTAB-Map keeps everything (all scans, all poses) in this database file - it IS
-    # the saved map; the 2D and 3D maps can be rebuilt from it at any time.
-    # scripts/run_sim_mapping.sh overrides the path (one map per world: ~/maps/<world>.db)
-    # and keeps it. PITFALL: started directly, navigation_rtabmap.launch.py uses this
-    # default path and DELETES it at startup (delete_db:=true).
-    # View a map with:             rtabmap-databaseViewer ~/maps/<name>.db
-    database_path: ~/.ros/rtabmap.db
+    # The map file (database_path) is set by the launch file. View a map with
+    # rtabmap-databaseViewer /ws/maps/<world>.db (in the container).
 
     # ---- Continuing a saved map (localization mode) --------------------------
-    # Only used while Mem/IncrementalMemory is "false" (launch argument localization:=true).
-    Mem/InitWMWithAllNodes: "true"  # load the WHOLE map at startup. Default "false" loads
-                                    # only the last run's part, so areas mapped in earlier
-                                    # runs could not be used to find the robot.
-    RGBD/StartAtOrigin: "true"      # first guess: the robot stands where the map started
-                                    # (in the sim it always spawns at x=0, y=0 - the start
-                                    # of the first run). "false" = guess the spot where the
-                                    # last run ended, which is wrong after a sim restart.
-                                    # Wrong guess? Click "2D Pose Estimate" in rviz.
+    Mem/InitWMWithAllNodes: "true"  # load the whole map at startup, not only the last run's part
+    RGBD/StartAtOrigin: "true"      # localization: first guess is where the map started - the
+                                    # sim always spawns the robot there (default: where the last
+                                    # run ended, wrong after a sim restart)
 
     # ---- Registration: ICP against the 3D cloud ------------------------------
     Reg/Strategy: "1"               # 0=visual, 1=ICP, 2=both. No camera -> ICP.
@@ -145,8 +134,7 @@
     Mem/NotLinkedNodesKept: "false" # don't store scans taken while standing still
     Mem/STMSize: "30"               # the newest 30 keyframes are never used for loop
                                     # closure (they are "too recent" to count as a revisit)
-    Mem/IncrementalMemory: "true"   # "true" = mapping, "false" = localisation only
-                                    # (the launch argument localization:= sets this)
+    Mem/IncrementalMemory: "true"   # "true" = mapping; set by the launch argument localization
 
     # ---- The 2D occupancy grid handed to Nav2 -------------------------------
     Grid/Sensor: "0"                # 0 = build the grid from the lidar cloud
@@ -181,17 +169,7 @@
                                     # lone stray points are dropped as noise
 
     # ---- The 3D OctoMap shown in rviz ----------------------------------------
-    # The OctoMap is stored as a tree: every level down halves the cube size, and the
-    # deepest level (16) is Grid/CellSize (5 cm). This setting picks which level is
-    # PUBLISHED on /octomap_occupied_space, /octomap_obstacles, ... :
-    #   16 = 5 cm cubes   15 = 10 cm cubes   14 = 20 cm cubes
-    # It only changes the 3D picture: the stored map and the 2D /map for Nav2 keep their
-    # 5 cm. (Changing Grid/CellSize instead would coarsen the Nav2 map too - doors would
-    # get narrower in the grid.)
-    # Kept at 16 (full 5 cm detail) on purpose. Tested with 15: the cubes get 10 cm, but
-    # merging 8 small cubes into one loses the ground/obstacle label - ~1400 floor cubes
-    # then showed up on /octomap_obstacles. Only lower it if rviz gets too slow.
-    # PITFALL: the rviz "Size (m)" of the OctoMap display must match (rviz/rtabmap.rviz),
-    # otherwise the cubes are drawn with gaps or overlap.
-    # NOTE: a plain ROS parameter -> a real number, NOT a string.
+    # Tree depth 16 = 5 cm cubes (= Grid/CellSize), 15 = 10 cm, ... Only changes the 3D picture.
+    # Tested with 15: ~1400 floor cubes showed up as obstacles. rviz's OctoMap "Size (m)" must match.
+    # A plain ROS parameter: a number, NOT a quoted string like the RTAB-Map parameters above.
     octomap_tree_depth: 16
