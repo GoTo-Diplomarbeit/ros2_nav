@@ -54,15 +54,18 @@ refuse_if_already_running() {
 # terminal does, so teleop ends too. The script then stops everything and RTAB-Map saves the map.
 # No input/output: this runs when the terminal is already gone.
 stop_script_in_container() {
-    docker compose exec -T "$SERVICE" \
-        bash -c 'kill -INT -- -"$(pgrep -of "^bash /ws/scripts/build_run_sim")"' < /dev/null > /dev/null 2>&1
+    docker compose exec -T -e SCRIPT="$CONTAINER_SCRIPT" "$SERVICE" \
+        bash -c 'kill -INT -- -"$(pgrep -of "^bash $SCRIPT")"' < /dev/null > /dev/null 2>&1
 }
 
 # On the host: starts the container and runs the calling script inside it, with the same
 # arguments. Inside the container (/.dockerenv exists there) it returns at once.
+# A script that doesn't use ROS (the room tool) sets CHECK_FOR_RUNNING_SIM=false first,
+# so it may run next to a sim.
 run_in_docker() {
     [[ -f /.dockerenv ]] && return 0
-    refuse_if_already_running
+    [[ "${CHECK_FOR_RUNNING_SIM:-true}" == true ]] && refuse_if_already_running
+    CONTAINER_SCRIPT="/ws/scripts/$(basename "$0")"
     cd "$REPO_DIR" || exit 1
     docker compose up -d --remove-orphans "$SERVICE" || exit 1
 
@@ -74,7 +77,7 @@ run_in_docker() {
     docker compose exec \
         -e TZ="$(cat /etc/timezone 2>/dev/null)" \
         -e ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}" \
-        "$SERVICE" bash "/ws/scripts/$(basename "$0")" "$@"
+        "$SERVICE" bash "$CONTAINER_SCRIPT" "$@"
     exit $?
 }
 
@@ -223,6 +226,7 @@ save_map_image() {
     echo "Saving the map image for the app ..."
     if timeout 30 ros2 run nav2_map_server map_saver_cli -f "$MAP_DIR/$MAP_NAME" --fmt png \
         --ros-args -p save_map_timeout:=10.0 > "$LOG_DIR/map_saver.log" 2>&1; then
+        MAP_IMAGE_SAVED=true
         echo "Map image saved: maps/$MAP_NAME.png + maps/$MAP_NAME.yaml"
     else
         echo "Saving the map image failed (log: $LOG_DIR/map_saver.log)"

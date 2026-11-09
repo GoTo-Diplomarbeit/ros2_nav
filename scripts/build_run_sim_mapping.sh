@@ -22,6 +22,7 @@ TELEOP_TURN=0.5    # rad/s
 WORLD=default
 NEW_MAP=false
 CONTINUE_MAP=false
+MAP_IMAGE_SAVED=false
 for argument in "$@"; do
     case "$argument" in
         --new) NEW_MAP=true ;;
@@ -52,6 +53,9 @@ after_stop() {
     elif [[ "$CONTINUE_MAP" == true ]]; then
         echo "The map as it was before this run: maps/$MAP_NAME.backup.db"
     fi
+    if [[ "$MAP_IMAGE_SAVED" == true && -f "$MAP_DIR/${MAP_NAME}_rooms.yaml" ]]; then
+        echo "The map changed - check the rooms still fit: bash scripts/build_run_define_rooms.sh $WORLD"
+    fi
 }
 
 # Called once RTAB-Map has found the robot on the continued map
@@ -72,7 +76,11 @@ if [[ "$NEW_MAP" == true && -f "$MAP_FILE" ]]; then
     mv "$MAP_FILE" "$MAP_DIR/$old_map"
     rm -f "$MAP_DIR/$MAP_NAME.backup.db"   # belonged to the old map, which is kept in $old_map
     echo "--new: the old map was moved to maps/$old_map"
-    # The old map's image belongs to the old map; a new one is saved at the end
+    # The rooms are in the old map's coordinates, so they go with it. The image is made new at the end.
+    if [[ -f "$MAP_DIR/${MAP_NAME}_rooms.yaml" ]]; then
+        mv "$MAP_DIR/${MAP_NAME}_rooms.yaml" "$MAP_DIR/${old_map%.db}_rooms.yaml"
+        echo "       its rooms were moved to maps/${old_map%.db}_rooms.yaml - define the rooms again"
+    fi
     rm -f "$MAP_DIR/$MAP_NAME.png" "$MAP_DIR/$MAP_NAME.yaml"
 fi
 if [[ -f "$MAP_FILE" ]]; then

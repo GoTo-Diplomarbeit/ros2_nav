@@ -66,3 +66,13 @@ bash scripts/build_run_sim_navigation.sh [world]
 ```
 
 Set goals in rviz with "2D Goal Pose". Logs of both scripts are in `log/sim_runs/`.
+
+### Define rooms (for the app's room selection)
+
+```shell
+bash scripts/build_run_define_rooms.sh [world]
+```
+
+Opens the map image of a mapped world. For each room: type its name in the terminal, click its corners in the
+window, then where the robot should stop and a point in the direction it should face. The rooms are saved in
+`maps/<world>_rooms.yaml` (in metres on the map). After continuing a map, check that the rooms still fit.
