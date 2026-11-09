@@ -199,16 +199,34 @@ stop_everything() {
     return $result
 }
 
-# Messages a script wants to print after everything stopped. It gets stop_everything's result.
-# The mapping script defines its own; this one does nothing.
+# Hooks a script can define for itself; these defaults do nothing.
+# before_stop: runs while everything still runs (e.g. to save the map image).
+# after_stop:  runs after everything stopped and gets stop_everything's result.
+before_stop() { :; }
 after_stop() { :; }
 
 # Runs whenever a run script ends (see setup_run). Ignores a second Ctrl+C, so the shutdown
 # can always finish.
 stop_on_exit() {
     trap '' INT TERM HUP
+    before_stop
     stop_everything
     after_stop $?
+}
+
+# Saves the 2D map RTAB-Map currently publishes on /map as maps/<world>.png + maps/<world>.yaml
+# (resolution and origin, to convert pixels to metres). This is what the app shows.
+# RTAB-Map must still be running, so call it from before_stop.
+save_map_image() {
+    [[ -n "$RTABMAP_ID" ]] && kill -0 "$RTABMAP_ID" 2>/dev/null || return 0
+    echo
+    echo "Saving the map image for the app ..."
+    if timeout 30 ros2 run nav2_map_server map_saver_cli -f "$MAP_DIR/$MAP_NAME" --fmt png \
+        --ros-args -p save_map_timeout:=10.0 > "$LOG_DIR/map_saver.log" 2>&1; then
+        echo "Map image saved: maps/$MAP_NAME.png + maps/$MAP_NAME.yaml"
+    else
+        echo "Saving the map image failed (log: $LOG_DIR/map_saver.log)"
+    fi
 }
 
 # Starts the simulator and waits until the lidar and the odometry run. Sets SIM_ID.

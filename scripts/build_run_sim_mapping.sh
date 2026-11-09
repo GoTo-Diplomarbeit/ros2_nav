@@ -34,7 +34,17 @@ source "$(dirname "${BASH_SOURCE[0]}")/sim_common.sh"
 run_in_docker "$@"   # on the host: start the container and run this script in it
 setup_run
 
-# Printed after everything stopped (see stop_on_exit in sim_common.sh)
+# The hooks of stop_on_exit in sim_common.sh.
+# before_stop saves the map image while RTAB-Map still runs - but only if this run really built
+# the map: a new map, or a continued one after the robot was found (before that RTAB-Map only
+# localizes, and /map may be incomplete).
+before_stop() {
+    if [[ "$CONTINUE_MAP" == false || -f "$LOG_DIR/robot_found" ]]; then
+        save_map_image
+    else
+        echo "The robot was never found on the map - the map image is left as it was."
+    fi
+}
 after_stop() {
     [[ -z "$RTABMAP_ID" ]] && return   # the run ended before RTAB-Map started
     if [[ $1 == 0 ]]; then
@@ -46,6 +56,7 @@ after_stop() {
 
 # Called once RTAB-Map has found the robot on the continued map
 switch_to_mapping() {
+    touch "$LOG_DIR/robot_found"   # for before_stop
     if ros2 service call /rtabmap/set_mode_mapping std_srvs/srv/Empty > /dev/null 2>&1; then
         echo ">>> Robot found on the map - new areas are added from now on."
     else
@@ -61,6 +72,8 @@ if [[ "$NEW_MAP" == true && -f "$MAP_FILE" ]]; then
     mv "$MAP_FILE" "$MAP_DIR/$old_map"
     rm -f "$MAP_DIR/$MAP_NAME.backup.db"   # belonged to the old map, which is kept in $old_map
     echo "--new: the old map was moved to maps/$old_map"
+    # The old map's image belongs to the old map; a new one is saved at the end
+    rm -f "$MAP_DIR/$MAP_NAME.png" "$MAP_DIR/$MAP_NAME.yaml"
 fi
 if [[ -f "$MAP_FILE" ]]; then
     CONTINUE_MAP=true

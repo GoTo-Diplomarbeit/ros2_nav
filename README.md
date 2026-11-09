@@ -56,6 +56,7 @@ bash scripts/build_run_sim_mapping.sh [world] [--new]
 ```
 
 One map per world is saved in `maps/<world>.db` (gitignored) and continued on the next run; `--new` starts over.
+At the end of each run the 2D map is also saved as `maps/<world>.png` + `maps/<world>.yaml` (for the app).
 Stop with Ctrl+C in the script's terminal, not with `docker compose down`, otherwise the map may not be saved.
 
 ### Navigate on a saved map (RTAB-Map + Nav2)
