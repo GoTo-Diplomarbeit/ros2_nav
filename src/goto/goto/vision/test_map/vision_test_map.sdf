@@ -540,7 +540,7 @@
             <pose>3.0 0.0 0 0 0 -1.5708</pose>
         </include>
 
-        <!--
+
 
         <include>
             <name>test_person_01</name>
@@ -602,7 +602,7 @@
             <static>true</static>
             <pose>4.21 -0.88 0 0 0 -2.9</pose>
         </include>
-        -->
+
 
     </world>
 </sdf>
