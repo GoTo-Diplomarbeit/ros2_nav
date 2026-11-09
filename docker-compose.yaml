@@ -9,6 +9,8 @@ x-gui: &gui
     # Rootless Docker leaves /sys empty, so libdrm can't detect the render node
     # and Gazebo falls back to CPU rendering. Read-only mount fixes this.
     - /sys:/sys:ro
+    # photos taken by the vision node (saved to ~/go2_detections inside the container, which runs as root)
+    - ${HOME}/go2_detections:/root/go2_detections
   environment:
     - DISPLAY=${DISPLAY}
     - XAUTHORITY=/tmp/.docker.xauth
