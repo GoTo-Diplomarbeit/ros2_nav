@@ -12,6 +12,8 @@ from goto.node_utils.node_wrapper import NodeWrapper
 from goto.state.mission_state import State
 from goto.vision.image_recognition import ImageRecognition
 
+# TODO: check if crop works
+
 # minimum box area of person
 # aka how close the person is to the camera
 MIN_PERSON_AREA = 28000
@@ -25,10 +27,11 @@ BOX_HEIGHT = 465
 # and within this upper fraction of the person box (the head is at the top)
 FACE_TOP_FRACTION = 0.4
 
+# extra margin around the person box when cropping the saved photo (fraction of box width / height)
+CROP_PADDING = 0.1
+
 
 # TODO: change timer logic
-
-# TODO: only take photo of the closest person
 
 
 class VisionNode(NodeWrapper):
@@ -82,25 +85,25 @@ class VisionNode(NodeWrapper):
                 return person, face
         return None, None
 
-    # check if person is perfectly visible
-    def _is_person_correctly_visible(self, people, faces, target_rectangle) -> bool:
+    # check if person is perfectly visible; returns the selected person box, or None if no valid person
+    def _get_visible_person(self, people, faces, target_rectangle):
         if not people and not faces:
             self.print_log("Cannot take photo! No person detected.", "warn")
-            return False
+            return None
         if people and not faces:
             self.print_log("Cannot take photo! Either too close or the face is obstructed", "warn")
-            return False
+            return None
         if not people and faces:
             self.print_log(
                 "Cannot take photo! The person must face the camera and the entire body must be visible", "warn"
             )
-            return False
+            return None
 
         # only use a face that actually belongs to the person (avoids pairing person A with face B)
         person, face = self._select_person(people, faces)
         if person is None:
             self.print_log("Cannot take photo! The detected face does not belong to a detected person.", "warn")
-            return False
+            return None
 
         # check if person and face is inside the target rectangle (green rectangle)
         is_person_in_rectangle = self._is_box_inside_rectangle(person, target_rectangle)
@@ -108,7 +111,7 @@ class VisionNode(NodeWrapper):
 
         if not is_person_in_rectangle or not is_face_in_rectangle:
             self.print_log("Cannot take photo! The person has to be inside the rectangle.", "warn")
-            return False
+            return None
 
         area_person = self._box_area(person)
         if area_person < MIN_PERSON_AREA:
@@ -117,9 +120,9 @@ class VisionNode(NodeWrapper):
                 + f" (Current area: {area_person:.0f}, must be over {MIN_PERSON_AREA:.0f})",
                 "warn",
             )
-            return False
+            return None
 
-        return True
+        return person
 
     def _setup_channels(self):
         person_model_path = os.path.join("weights", "yolov8n.pt")
@@ -138,7 +141,8 @@ class VisionNode(NodeWrapper):
         self._busy = False
 
         # Capture state: "idle" -> "countdown" -> "waiting_for_person" -> "idle"
-        self._save_dir = os.path.expanduser("~/go2_detections")
+        # TODO: temporary hardcoded path, switch back to a configurable / home-relative dir
+        self._save_dir = "/home/gazebo/go2_detections"
         os.makedirs(self._save_dir, exist_ok=True)
         self._state = "idle"
         self._countdown_s = 5.0
@@ -231,7 +235,7 @@ class VisionNode(NodeWrapper):
                 # return to idle state if the person is not standing in front of the camera properly
                 # TODO: a single bad frame (YOLO detection flicker) cancels the whole countdown -
                 #  add a grace period (e.g. only cancel after N bad frames in a row / ~0.5 s)
-                if not self._is_person_correctly_visible(people, faces, target_rectangle):
+                if self._get_visible_person(people, faces, target_rectangle) is None:
                     self.print_log("Countdown cancelled!", "warn")
                     self._cancel_capture()
                     return
@@ -249,9 +253,9 @@ class VisionNode(NodeWrapper):
             # CAPTURE
             if self._state == "waiting_for_person":
                 # check if person is actually facing the camera
-                if self._is_person_correctly_visible(people, faces, target_rectangle):
-                    # TODO: only crop person
-                    self.save_image()
+                person = self._get_visible_person(people, faces, target_rectangle)
+                if person is not None:
+                    self.save_image(person)
                     self._state = "idle"
                 elif now > self._wait_end:
                     self.print_log(
@@ -263,10 +267,24 @@ class VisionNode(NodeWrapper):
         finally:
             self._busy = False
 
-    def save_image(self):
+    # crop the frame to the person box (plus CROP_PADDING), clamped to the image borders
+    @staticmethod
+    def _crop_to_person(frame, person):
+        height, width = frame.shape[:2]
+        x1, y1, x2, y2 = person[:4]
+        pad_x = (x2 - x1) * CROP_PADDING
+        pad_y = (y2 - y1) * CROP_PADDING
+        x1 = max(0, int(x1 - pad_x))
+        y1 = max(0, int(y1 - pad_y))
+        x2 = min(width, int(x2 + pad_x))
+        y2 = min(height, int(y2 + pad_y))
+        return frame[y1:y2, x1:x2]
+
+    # save only the selected person (cropped from the clean frame, without boxes)
+    def save_image(self, person):
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         path = os.path.join(self._save_dir, f"person_{stamp}.jpg")
-        cv2.imwrite(path, self._frame)  # clean frame, without boxes
+        cv2.imwrite(path, self._crop_to_person(self._frame, person))
         self.print_log(f"Saved {path}", "info")
         self._result_pub.publish(String(data=path))
 
