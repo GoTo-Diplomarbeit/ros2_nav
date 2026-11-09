@@ -1,0 +1,608 @@
+<?xml version="1.0" ?>
+<sdf version="1.8">
+    <world name="default">
+        <!-- Geographic origin for GPS simulation — change to match your actual test site -->
+        <spherical_coordinates>
+            <surface_model>EARTH_WGS84</surface_model>
+            <world_frame_orientation>ENU</world_frame_orientation>
+            <latitude_deg>30.0444</latitude_deg>
+            <longitude_deg>31.2357</longitude_deg>
+            <elevation>74.0</elevation>
+            <heading_deg>0</heading_deg>
+        </spherical_coordinates>
+
+        <physics name="1ms" type="bullet-featherstone">
+            <max_step_size>0.001</max_step_size>
+            <real_time_factor>1.0</real_time_factor>
+        </physics>
+
+        <!-- Plugins -->
+        <plugin
+                filename="gz-sim-physics-system"
+                name="gz::sim::systems::Physics">
+        </plugin>
+        <plugin
+                filename="gz-sim-sensors-system"
+                name="gz::sim::systems::Sensors">
+            <render_engine>ogre2</render_engine>
+        </plugin>
+        <plugin
+                filename="gz-sim-user-commands-system"
+                name="gz::sim::systems::UserCommands">
+        </plugin>
+        <plugin
+                filename="gz-sim-scene-broadcaster-system"
+                name="gz::sim::systems::SceneBroadcaster">
+        </plugin>
+        <plugin
+                filename="gz-sim-navsat-system"
+                name="gz::sim::systems::NavSat">
+        </plugin>
+        <plugin
+                filename="gz-sim-contact-system"
+                name="gz::sim::systems::Contact">
+        </plugin>
+
+        <!-- Lights -->
+        <light type="directional" name="sun">
+            <cast_shadows>true</cast_shadows>
+            <pose>0 0 10 0 0 0</pose>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+            <specular>0.2 0.2 0.2 1</specular>
+            <attenuation>
+                <range>1000</range>
+                <constant>0.9</constant>
+                <linear>0.01</linear>
+                <quadratic>0.001</quadratic>
+            </attenuation>
+            <direction>-0.5 0.1 -0.9</direction>
+        </light>
+
+        <!-- Ground Plane -->
+        <model name="ground_plane">
+            <static>true</static>
+            <link name="link">
+                <collision name="collision">
+                    <geometry>
+                        <plane>
+                            <normal>0 0 1</normal>
+                            <size>100 100</size>
+                        </plane>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <plane>
+                            <normal>0 0 1</normal>
+                            <size>100 100</size>
+                        </plane>
+                    </geometry>
+                    <material>
+                        <ambient>0.8 0.8 0.8 1</ambient>
+                        <diffuse>0.8 0.8 0.8 1</diffuse>
+                        <specular>0.8 0.8 0.8 1</specular>
+                    </material>
+                </visual>
+            </link>
+        </model>
+
+        <model name="school_floor">
+            <static>true</static>
+            <link name="library_south">
+                <pose>2.0 2.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>6 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>6 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="library_west">
+                <pose>-1.0 5.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>0.4 6.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>0.4 6.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="library_east">
+                <pose>5.0 4.5 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>0.4 5.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>0.4 5.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="northeast_wall">
+                <pose>9.0 7.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>8 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>8 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="south_wall_left">
+                <pose>-5.0 -4.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>6 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>6 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="south_wall_right">
+                <pose>7.0 -4.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>12 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>12 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="west_wall_long">
+                <pose>-8.0 -3.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>0.4 8.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>0.4 8.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="west_wall_upper">
+                <pose>-8.0 4.5 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>0.4 3.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>0.4 3.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="west_wall_top_stub">
+                <pose>-8.0 7.5 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>0.4 1.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>0.4 1.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="west_room_south_stub">
+                <pose>-8.5 7.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>1 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>1 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="west_room_north_stub">
+                <pose>-8.5 6.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>1 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>1 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="west_room_lower_stub">
+                <pose>-8.5 3.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>1 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>1 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="north_room_south">
+                <pose>-4.5 7.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>3 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>3 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="north_room_west">
+                <pose>-6.0 7.5 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>0.4 1.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>0.4 1.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="north_room_east">
+                <pose>-3.0 7.5 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>0.4 1.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>0.4 1.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="closed_room_north">
+                <pose>7.0 -1.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>4 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>4 0.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="closed_room_west">
+                <pose>5.0 -2.5 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>0.4 3.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>0.4 3.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="closed_room_east">
+                <pose>9.0 -2.5 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>0.4 3.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>0.4 3.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="east_wall">
+                <pose>13.0 -2.5 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>0.4 3.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>0.4 3.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="entrance_west">
+                <pose>-2.0 -5.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>0.4 2.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>0.4 2.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="entrance_east">
+                <pose>1.0 -5.0 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>0.4 2.4 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>0.4 2.4 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="staircase_block">
+                <pose>-6.5 -0.5 1.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>3 3 3.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>3 3 3.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="pillar_small">
+                <pose>-2.5 0.5 0.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>1 1 1.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>1 1 1.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="obstacle_upper_left">
+                <pose>7.5 4.0 0.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>1 2 1.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>1 2 1.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="obstacle_upper_right">
+                <pose>10.5 4.0 0.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>1 2 1.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>1 2 1.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+            <link name="obstacle_square">
+                <pose>11.0 -2.0 0.5 0 0 0</pose>
+                <collision name="collision">
+                    <geometry>
+                        <box>
+                            <size>2 2 1.0</size>
+                        </box>
+                    </geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry>
+                        <box>
+                            <size>2 2 1.0</size>
+                        </box>
+                    </geometry>
+                </visual>
+            </link>
+        </model>
+
+        <!-- Human in front of the robot spawn, for camera/ML person detection -->
+        <include>
+            <name>test_person</name>
+            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+            <static>true</static>
+            <pose>3.0 0.0 0 0 0 -1.5708</pose>
+        </include>
+
+
+
+        <include>
+            <name>test_person_01</name>
+            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+            <static>true</static>
+            <pose>4.5 0.0 0 0 0 2.8</pose>
+        </include>
+        <include>
+            <name>test_person_02</name>
+            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+            <static>true</static>
+            <pose>4.21 0.88 0 0 0 -0.4</pose>
+        </include>
+        <include>
+            <name>test_person_03</name>
+            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+            <static>true</static>
+            <pose>3.46 1.43 0 0 0 1.6</pose>
+        </include>
+        <include>
+            <name>test_person_04</name>
+            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+            <static>true</static>
+            <pose>2.54 1.43 0 0 0 0.9</pose>
+        </include>
+        <include>
+            <name>test_person_05</name>
+            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+            <static>true</static>
+            <pose>1.79 0.88 0 0 0 -2.1</pose>
+        </include>
+        <include>
+            <name>test_person_06</name>
+            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+            <static>true</static>
+            <pose>1.5 0.0 0 0 0 0.2</pose>
+        </include>
+        <include>
+            <name>test_person_07</name>
+            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+            <static>true</static>
+            <pose>1.79 -0.88 0 0 0 -1.3</pose>
+        </include>
+        <include>
+            <name>test_person_08</name>
+            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+            <static>true</static>
+            <pose>2.54 -1.43 0 0 0 2.2</pose>
+        </include>
+        <include>
+            <name>test_person_09</name>
+            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+            <static>true</static>
+            <pose>3.46 -1.43 0 0 0 -0.8</pose>
+        </include>
+        <include>
+            <name>test_person_10</name>
+            <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Standing person</uri>
+            <static>true</static>
+            <pose>4.21 -0.88 0 0 0 -2.9</pose>
+        </include>
+
+
+    </world>
+</sdf>

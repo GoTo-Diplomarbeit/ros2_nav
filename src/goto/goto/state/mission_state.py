@@ -25,7 +25,7 @@ class State(Enum):
     STARTUP = "STARTUP"  # waiting for localization and Nav2
     IDLE = "IDLE"  # standing, waiting for a destination
     CHECK_REQUEST = "CHECK_REQUEST"  # is the destination known and reachable?
-    WAIT_FOR_PERSON = "WAIT_FOR_PERSON"  # waiting for the person to be ready
+    REGISTER_PERSON = "REGISTER_PERSON"  # taking a photo of the person to guide
     GUIDING = "GUIDING"  # walking to the destination with the person
     PERSON_FELL_BEHIND = "PERSON_FELL_BEHIND"  # paused, waiting for the person to catch up
     PERSON_LOST = "PERSON_LOST"  # person gone for too long
