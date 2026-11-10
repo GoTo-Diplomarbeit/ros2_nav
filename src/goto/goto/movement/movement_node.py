@@ -6,7 +6,7 @@ import copy
 import math
 from typing import Optional
 
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Pose, Twist
 
 from goto.movement.movement_backend import (
     GazeboBackend,
@@ -16,6 +16,7 @@ from goto.movement.movement_backend import (
 )
 from goto.node_utils import node_runner
 from goto.node_utils.node_wrapper import NodeWrapper
+from goto.state.mission_state import State
 
 
 class MovementNode(NodeWrapper):
@@ -43,47 +44,123 @@ class MovementNode(NodeWrapper):
 
         self._kp: float = 2.0
 
-        # Creates a Timer which is called every 0.05s
+        self._pitch_target: float = -math.radians(5)
+
+        self._current_pitch: float = 0.0
+
+        self._start_pitch: float = 0.0
+
+        self._photo_active: bool = False
+
+        self._ramp_start = self.node.get_clock().now()
+
+        # Creates a Timer which is called every 0.01s
         self._timer = self.node.create_timer(0.01, self._on_timer)
+
+        self.active_states = frozenset({State.PERSON_LOST})
+
+    def _run(self) -> None:
+        """
+        Lets you choose which methode should be called at which STATE
+        """
+        match self.state:
+            case State.PERSON_LOST:
+                self._photo_pose()
 
     # --
     # -- Private class functions
     # --
 
+    def _start_ramp(self) -> None:
+        """
+        Calculates the perfect s shaped acceleration for the tilt
+        """
+        if not self._photo_active:  # wenn _photo_activ false dann abbrechen
+            return
+        duration = 2.0
+
+        t = (self.node.get_clock().now() - self._ramp_start).nanoseconds / 1e9
+        s = min(max(t / duration, 0.0), 1.0)
+        s = s * s * (3.0 - 2.0 * s)  # smoothstep (S-shaped)
+
+        self._current_pitch = self._start_pitch + (self._pitch_target - self._start_pitch) * s
+
+        self.movement_backend.send_tilt_command(self._current_pitch)
+
+        if t >= duration and self._pitch_target == 0.0:
+            self._photo_active = False
+
+    def _end_ramp(self) -> None:
+        if self._pitch_target == 0.0:
+            return
+
+        self._start_pitch = self._current_pitch
+        self._pitch_target = 0.0
+        self._ramp_start = self.node.get_clock().now()
+
+    def _photo_pose(self) -> None:
+        """
+        Methode which sends the commands for the position of the robot to make a proper photo of a person
+        """
+        if self._photo_active:
+            return
+
+        self._photo_active = True
+        self._ramp_start = self.node.get_clock().now()
+        self._pitch_target = -math.radians(5)
+
+        last = self._last_command if self._last_command is not None else Twist()
+        command_to_send = copy.deepcopy(last)
+        command_to_send.linear.x = 0.0
+        command_to_send.linear.y = 0.0
+
+        self._last_command = command_to_send
+        self.movement_backend.send_movement_command(command_to_send)
+
+        self._start_pitch = self._current_pitch
+        self._start_ramp()
+
     def _on_timer(self) -> None:
         """
-        Method which is called every 0.05s, corrects the angular values of the robot
+        Method which is called every 0.01s, corrects the angular values of the robot
         """
+        self._start_ramp()
+
+        if self.state != State.PERSON_LOST and self._photo_active:
+            self._end_ramp()
 
         if self._last_command is None:
             return
-
-        command_to_send = copy.deepcopy(self._last_command)
-        yaw = self.movement_backend.get_yaw()
 
         # Check if last command is Twist with 0 0 0, 0 0 0
         if self._last_command == Twist():
             command_to_send = Twist()  # Send one 0 command to stop
         else:
-            # for returning the angular values in the log
-            # if yaw is not None:
-            # self.node.get_logger().info(
-            # f"Korrektur aktiv -> YAW: {yaw:.3f}")
+            last = self._last_command
+            if last is None:
+                return
 
-            if abs(self._last_command.angular.z) < 0.01:
-                if self._target_yaw is not None:
-                    if yaw is not None:
-                        error_yaw = self._target_yaw - yaw
-                        true_error = math.atan2(math.sin(error_yaw), math.cos(error_yaw))
-                        command_to_send.angular.z += true_error * self._kp
+            command_to_send = copy.deepcopy(last)
+            yaw = self.movement_backend.get_yaw()
+            target_yaw = self._target_yaw
+
+            # for returning the angular values in the log
+            if yaw is not None:
+                self.node.get_logger().info(f"Korrektur aktiv -> YAW: {yaw:.3f}")
+
+            if abs(last.angular.z) < 0.01 and target_yaw is not None and yaw is not None:
+                error_yaw = target_yaw - yaw
+                true_error = math.atan2(math.sin(error_yaw), math.cos(error_yaw))
+                command_to_send.angular.z += true_error * self._kp
 
             # needed to read the target and the error
             # self.node.get_logger().info(
-            # f"Korrektur aktiv -> TARGET: {self._target_yaw:.3f} | YAW: {yaw:.3f} | TRUE_ERROR: {true_error:.3f}")
+            # f"Korrektur aktiv -> TARGET: {self._target_yaw:.3f} | YAW: {yaw:.3f} | TRUE_ERROR:
+            # {true_error:.3f}")
 
-        self.movement_backend.send(command_to_send)
+        self.movement_backend.send_movement_command(command_to_send)
 
-    def _setup_channels(self, movement_backend_type: MovementBackendType) -> None:
+    def _setup_channels(self, movement_backend_type: Optional[MovementBackendType]) -> None:
         """
         Sets up the subscription and publisher channels for the movement node.
         Returns: None
@@ -91,6 +168,7 @@ class MovementNode(NodeWrapper):
         """
         # Parameters - can be set from the launch file or with --ros-args -p
         self.node.declare_parameter("backend", MovementBackendType.GAZEBO.name.lower())
+
         self.node.declare_parameter("network_interface", "eth0")
 
         # Explicit argument wins, otherwise use the "backend" parameter
@@ -105,10 +183,11 @@ class MovementNode(NodeWrapper):
         # User chose simulator -> Build simulator Node
         if movement_backend_type == MovementBackendType.GAZEBO:
             # Movement command publisher - Used for publishing movement Twist commands
-            _movement_command_publisher = self.node.create_publisher(Twist, "/cmd_vel", 10)
 
+            _movement_command_publisher = self.node.create_publisher(Twist, "/cmd_vel", 10)
+            _pose_command_publisher = self.node.create_publisher(Pose, "/body_pose", 10)
             # Create the required backend
-            self.movement_backend = GazeboBackend(_movement_command_publisher, self.node)
+            self.movement_backend = GazeboBackend(_movement_command_publisher, _pose_command_publisher, self.node)
 
         else:
             # The required network interface
