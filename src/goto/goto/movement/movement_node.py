@@ -48,7 +48,9 @@ class MovementNode(NodeWrapper):
 
         self._current_pitch: float = 0.0
 
-        self._photo_activ: bool = False
+        self._start_pitch: float = 0.0
+
+        self._photo_active: bool = False
 
         self._ramp_start = self.node.get_clock().now()
 
@@ -73,24 +75,39 @@ class MovementNode(NodeWrapper):
         """
         Calculates the perfect s shaped acceleration for the tilt
         """
-        if not self._photo_activ:
+        if not self._photo_active:  # wenn _photo_activ false dann abbrechen
             return
         duration = 2.0
 
         t = (self.node.get_clock().now() - self._ramp_start).nanoseconds / 1e9
         s = min(max(t / duration, 0.0), 1.0)
         s = s * s * (3.0 - 2.0 * s)  # smoothstep (S-shaped)
-        self.movement_backend.send_tilt_command(self._pitch_target * s)
+
+        self._current_pitch = self._start_pitch + (self._pitch_target - self._start_pitch) * s
+
+        self.movement_backend.send_tilt_command(self._current_pitch)
+
+        if t >= duration and self._pitch_target == 0.0:
+            self._photo_active = False
+
+    def _end_ramp(self) -> None:
+        if self._pitch_target == 0.0:
+            return
+
+        self._start_pitch = self._current_pitch
+        self._pitch_target = 0.0
+        self._ramp_start = self.node.get_clock().now()
 
     def _photo_pose(self) -> None:
         """
         Methode which sends the commands for the position of the robot to make a proper photo of a person
         """
-        if self._photo_activ:
+        if self._photo_active:
             return
 
-        self._photo_activ = True
+        self._photo_active = True
         self._ramp_start = self.node.get_clock().now()
+        self._pitch_target = -math.radians(5)
 
         last = self._last_command if self._last_command is not None else Twist()
         command_to_send = copy.deepcopy(last)
@@ -100,13 +117,17 @@ class MovementNode(NodeWrapper):
         self._last_command = command_to_send
         self.movement_backend.send_movement_command(command_to_send)
 
+        self._start_pitch = self._current_pitch
         self._start_ramp()
 
     def _on_timer(self) -> None:
         """
-        Method which is called every 0.05s, corrects the angular values of the robot
+        Method which is called every 0.01s, corrects the angular values of the robot
         """
         self._start_ramp()
+
+        if self.state != State.PERSON_LOST and self._photo_active:
+            self._end_ramp()
 
         if self._last_command is None:
             return
