@@ -31,7 +31,7 @@ WORKDIR /ws
 COPY requirements.txt .
 # Install the required python packages, with a persistent pip cache
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --break-system-packages -r requirements.txt
+    pip install --break-system-packages --ignore-installed -r requirements.txt
 
 # -- Add the ROS python folders to Python's search path via a .pth file (so PyCharm finds rclpy etc.)
 RUN printf "/opt/ros/jazzy/lib/python3.12/site-packages\n/opt/ros/jazzy/local/lib/python3.12/dist-packages\n" > /usr/local/lib/python3.12/dist-packages/ros.pth

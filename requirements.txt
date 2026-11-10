@@ -28,7 +28,6 @@ pytest
 fastapi
 zeroconf
 uvicorn[standard]
-aiortc
 aiohttp
 
 # Person and face recognition (go2_nav/vision/image_recognition.py): YOLO models.
