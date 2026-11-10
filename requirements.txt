@@ -26,11 +26,14 @@ pytest
 # App communication (go2_nav/communication/camera_node.py): web server for the app
 # (fastapi + starlette, served by uvicorn) and network discovery (zeroconf).
 fastapi
-starlette
-uvicorn
 zeroconf
 uvicorn[standard]
+aiortc
+aiohttp
 
 # Person and face recognition (go2_nav/vision/image_recognition.py): YOLO models.
 # Large: pulls in PyTorch (a few GB).
 ultralytics
+
+# Needed for communication across networks
+iroh
