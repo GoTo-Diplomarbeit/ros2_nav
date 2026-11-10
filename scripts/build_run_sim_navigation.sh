@@ -27,13 +27,28 @@ if [[ ! -f "$MAP_FILE" ]]; then
     exit 1
 fi
 
+ROOMS_FILE="$MAP_DIR/${MAP_NAME}_rooms.yaml"
+PLANNER_ID=""
+
+# Stop the planner together with everything else (hook of stop_on_exit in sim_common.sh)
+before_stop() { stop_session "$PLANNER_ID"; }
+
 announce_ready() {
-    echo ">>> Robot found on the map - set goals in rviz with \"2D Goal Pose\"."
+    echo ">>> Robot found on the map - set goals in rviz with \"2D Goal Pose\", or drive to a room:"
+    if [[ -f "$ROOMS_FILE" ]]; then
+        echo "    rooms: $(python3 -c "from goto.rooms.room_file import load_rooms; print(', '.join(load_rooms('$ROOMS_FILE')))")"
+        echo "    ros2 topic pub --once -w 1 /goto_room std_msgs/String \"data: '<room>'\"   (status: ros2 topic echo /navigation_status)"
+    else
+        echo "    no rooms defined yet - define them with: bash scripts/build_run_define_rooms.sh $WORLD"
+    fi
 }
 
 echo "Navigating on maps/$MAP_NAME.db"
 start_simulator
 start_rtabmap "RTAB-Map (localization) + rviz + Nav2" use_nav2:=true localization:=true
+# The planner drives to a room sent on /goto_room (by the app, or by hand)
+PLANNER_ID=$(start_in_background "$LOG_DIR/planner.log" \
+    ros2 run goto planner_node --ros-args -p rooms_file:="$ROOMS_FILE" -p use_sim_time:=true)
 echo "      looking for the robot on the map ..."
 watch_localization announce_ready &
 WATCHER_ID=$!

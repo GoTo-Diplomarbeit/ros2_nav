@@ -13,6 +13,6 @@
 __pycache__/
 /weights/
 
-# RTAB-Map maps saved by the sim scripts (~100 MB each, too big for git).
-# The 2D maps (.pgm/.yaml) in maps/ stay in git.
-/maps/*.db
+# Map files (RTAB-Map .db, map image + .yaml, room files) are transferred by hand, not via git.
+# Files git already tracks (the old room_map.* / school_mockup.*) stay tracked.
+/maps/*

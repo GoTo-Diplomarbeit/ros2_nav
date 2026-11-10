@@ -102,7 +102,9 @@ controller_server:
       lookahead_dist: 0.6
       min_lookahead_dist: 0.3
       max_lookahead_dist: 0.9
-      transform_tolerance: 0.1
+      # How long to wait for the robot's position (TF) at the path's time stamp. 0.1 aborted long
+      # trips on the busy laptop ("extrapolation into the future": the position came ~30 ms late).
+      transform_tolerance: 0.3
       use_collision_detection: true
       max_allowed_time_to_collision_up_to_carrot: 1.0
       use_regulated_linear_velocity_scaling: true

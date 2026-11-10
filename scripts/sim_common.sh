@@ -54,15 +54,18 @@ refuse_if_already_running() {
 # terminal does, so teleop ends too. The script then stops everything and RTAB-Map saves the map.
 # No input/output: this runs when the terminal is already gone.
 stop_script_in_container() {
-    docker compose exec -T "$SERVICE" \
-        bash -c 'kill -INT -- -"$(pgrep -of "^bash /ws/scripts/build_run_sim")"' < /dev/null > /dev/null 2>&1
+    docker compose exec -T -e SCRIPT="$CONTAINER_SCRIPT" "$SERVICE" \
+        bash -c 'kill -INT -- -"$(pgrep -of "^bash $SCRIPT")"' < /dev/null > /dev/null 2>&1
 }
 
 # On the host: starts the container and runs the calling script inside it, with the same
 # arguments. Inside the container (/.dockerenv exists there) it returns at once.
+# A script that doesn't use ROS (the room tool) sets CHECK_FOR_RUNNING_SIM=false first,
+# so it may run next to a sim.
 run_in_docker() {
     [[ -f /.dockerenv ]] && return 0
-    refuse_if_already_running
+    [[ "${CHECK_FOR_RUNNING_SIM:-true}" == true ]] && refuse_if_already_running
+    CONTAINER_SCRIPT="/ws/scripts/$(basename "$0")"
     cd "$REPO_DIR" || exit 1
     docker compose up -d --remove-orphans "$SERVICE" || exit 1
 
@@ -70,11 +73,14 @@ run_in_docker() {
     # that on), so do it ourselves
     trap stop_script_in_container HUP TERM
 
-    # TZ: the container runs on UTC; ROS_DOMAIN_ID: keeps two sims on one network apart
+    # TZ: the container runs on UTC; ROS_DOMAIN_ID: keeps two sims on one network apart;
+    # PYTHONDONTWRITEBYTECODE: nodes run from the source folder (--symlink-install), and Python's
+    # cache files there would belong to root
     docker compose exec \
         -e TZ="$(cat /etc/timezone 2>/dev/null)" \
+        -e PYTHONDONTWRITEBYTECODE=1 \
         -e ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}" \
-        "$SERVICE" bash "/ws/scripts/$(basename "$0")" "$@"
+        "$SERVICE" bash "$CONTAINER_SCRIPT" "$@"
     exit $?
 }
 
@@ -199,16 +205,35 @@ stop_everything() {
     return $result
 }
 
-# Messages a script wants to print after everything stopped. It gets stop_everything's result.
-# The mapping script defines its own; this one does nothing.
+# Hooks a script can define for itself; these defaults do nothing.
+# before_stop: runs while everything still runs (e.g. to save the map image).
+# after_stop:  runs after everything stopped and gets stop_everything's result.
+before_stop() { :; }
 after_stop() { :; }
 
 # Runs whenever a run script ends (see setup_run). Ignores a second Ctrl+C, so the shutdown
 # can always finish.
 stop_on_exit() {
     trap '' INT TERM HUP
+    before_stop
     stop_everything
     after_stop $?
+}
+
+# Saves the 2D map RTAB-Map currently publishes on /map as maps/<world>.png + maps/<world>.yaml
+# (resolution and origin, to convert pixels to metres). This is what the app shows.
+# RTAB-Map must still be running, so call it from before_stop.
+save_map_image() {
+    [[ -n "$RTABMAP_ID" ]] && kill -0 "$RTABMAP_ID" 2>/dev/null || return 0
+    echo
+    echo "Saving the map image for the app ..."
+    if timeout 30 ros2 run nav2_map_server map_saver_cli -f "$MAP_DIR/$MAP_NAME" --fmt png \
+        --ros-args -p save_map_timeout:=10.0 > "$LOG_DIR/map_saver.log" 2>&1; then
+        MAP_IMAGE_SAVED=true
+        echo "Map image saved: maps/$MAP_NAME.png + maps/$MAP_NAME.yaml"
+    else
+        echo "Saving the map image failed (log: $LOG_DIR/map_saver.log)"
+    fi
 }
 
 # Starts the simulator and waits until the lidar and the odometry run. Sets SIM_ID.
