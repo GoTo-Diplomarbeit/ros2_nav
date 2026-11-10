@@ -50,7 +50,7 @@ WORKDIR /ws
 # Copy the package.xml file to docker
 COPY /src/goto/package.xml .
 # Install every package declared inside the file
-RUN rosdep install --from-paths . --ignore-src -r -y
+RUN apt-get update && rosdep install --from-paths . --ignore-src -r -y
 
 # ---------------------------------------
 # | Clone and build the unitree_go2_sim |
@@ -63,7 +63,7 @@ ADD https://api.github.com/repos/GoTo-Diplomarbeit/unitree_go2_ros2/git/refs/hea
 # Clone the repository into the unitree_go2_sim folder of its own workspace
 RUN git clone --recursive https://github.com/GoTo-Diplomarbeit/unitree_go2_ros2 .
 # Install all required packages
-RUN rosdep install --from-paths . --ignore-src -r -y
+RUN apt-get update && rosdep install --from-paths . --ignore-src -r -y
 # Build the unitree_go2_ros2 project
 RUN . /opt/ros/jazzy/setup.sh && colcon build
 
