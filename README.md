@@ -77,6 +77,17 @@ Opens the map image of a mapped world. For each room: type its name in the termi
 window, then where the robot should stop and a point in the direction it should face. The rooms are saved in
 `maps/<world>_rooms.yaml` (in metres on the map). After continuing a map, check that the rooms still fit.
 
+**Rooms from the app:** the app sends all rooms of the map as a JSON list, in metres on the map, with the
+same fields as the room file (`yaw` = heading at the goal in radians, 0 = along the map's x axis):
+
+```json
+[{"name": "1.12", "area": [[2.0, 1.0], [6.0, 1.0], [6.0, 4.5]], "goal": {"x": 3.2, "y": 0.6, "yaw": 1.571}}]
+```
+
+`web_server_node` saves them with `save_rooms(path, rooms_from_app(text))` from `goto/rooms/room_file.py`. The
+list replaces the file (a room left out is deleted). Bad data raises a `ValueError` with a clear message - answer it
+with `400 Bad Request`. The planner reads the file for every trip, so new rooms work without a restart.
+
 ### Drive to a room (planner_node)
 
 While `build_run_sim_navigation.sh` runs, send a room name from the world's room file:

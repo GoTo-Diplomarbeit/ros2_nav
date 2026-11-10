@@ -13,8 +13,11 @@ File maps/<world>_rooms.yaml, everything in metres on the map (frame "map"):
 
 Metres instead of pixels: when a map is continued, its image grows and pixel positions shift,
 but positions in metres stay the same.
+
+The rooms come from scripts/build_run_define_rooms.sh, or from the app (rooms_from_app + save_rooms).
 """
 
+import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -52,8 +55,31 @@ def load_rooms(path: str | Path) -> dict[str, Room]:
     if not isinstance(content, dict):
         raise ValueError(f"{path}: expected 'rooms:' at the top of the file")
 
+    try:
+        return rooms_from_entries(content.get("rooms") or [])  # "or []": "rooms:" with nothing under it
+    except ValueError as error:
+        raise ValueError(f"{path}: {error}") from error
+
+
+def rooms_from_app(text: str | bytes) -> dict[str, Room]:
+    """
+    Reads the rooms the app sends: a JSON list with the same fields as the room file, in metres:
+        [{"name": "1.12", "area": [[2.0, 1.0], [6.0, 1.0], [6.0, 4.5]], "goal": {"x": 3.2, "y": 0.6, "yaw": 1.571}}]
+    The list is all rooms of the map (save it with save_rooms). Bad data is raised as a ValueError.
+    """
+    try:
+        entries = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"not valid JSON: {error}") from error
+    if not isinstance(entries, list):
+        raise ValueError("expected a list of rooms")
+    return rooms_from_entries(entries)
+
+
+def rooms_from_entries(entries: list) -> dict[str, Room]:
+    """Checks the room entries of the file or the app and turns them into {name: Room}."""
     rooms = {}
-    for entry in content.get("rooms") or []:  # "or []": "rooms:" with nothing under it, e.g. all deleted
+    for entry in entries:
         try:
             room = Room(
                 name=entry["name"],
@@ -63,14 +89,17 @@ def load_rooms(path: str | Path) -> dict[str, Room]:
                 goal_yaw=float(entry["goal"]["yaw"]),
             )
         except (KeyError, TypeError, ValueError) as error:
-            raise ValueError(f"{path}: room entry {entry!r} needs name, area and goal (x, y, yaw)") from error
+            raise ValueError(f"room entry {entry!r} needs name, area and goal (x, y, yaw)") from error
         if not isinstance(room.name, str):
             # YAML reads  name: 1.10  as the number 1.1 - the app would send "1.10" and not find it
-            raise ValueError(f"{path}: room name {room.name} must be in quotes, e.g. name: '{room.name}'")
+            raise ValueError(f"room name {room.name} must be text; in the YAML file: name: '{room.name}'")
+        if not room.name or room.name != room.name.strip():
+            # The planner strips what it receives, and an empty name means "stop the trip"
+            raise ValueError(f"room name '{room.name}' must not be empty or start/end with spaces")
         if len(room.area) < 3:
-            raise ValueError(f"{path}: room '{room.name}' needs at least 3 corners")
+            raise ValueError(f"room '{room.name}' needs at least 3 corners")
         if room.name in rooms:
-            raise ValueError(f"{path}: room '{room.name}' is listed twice")
+            raise ValueError(f"room '{room.name}' is listed twice")
         rooms[room.name] = room
     return rooms
 

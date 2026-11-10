@@ -1,8 +1,9 @@
+import json
 import math
 
 import pytest
 
-from goto.rooms.room_file import Room, load_rooms, save_rooms, yaw_between
+from goto.rooms.room_file import Room, load_rooms, rooms_from_app, save_rooms, yaw_between
 
 # -- Setup code
 
@@ -95,6 +96,43 @@ def test_room_listed_twice_is_rejected(tmp_path):
 
     with pytest.raises(ValueError, match="listed twice"):
         load_rooms(path)
+
+
+def test_rooms_from_the_app_are_saved_to_the_room_file(tmp_path, two_rooms):
+    app_json = json.dumps(
+        [
+            {
+                "name": "Room 1.12",
+                "area": [[2, 1], [6, 1], [6, 4.5], [2, 4.5]],
+                "goal": {"x": 3.2, "y": 0.6, "yaw": 1.571},
+            },
+            {"name": "Library", "area": [[-3, -2], [-1, -2], [-2, 0.5]], "goal": {"x": -2, "y": -2.5, "yaw": -3.142}},
+        ]
+    )
+    path = tmp_path / "rooms.yaml"
+    save_rooms(path, rooms_from_app(app_json))
+
+    assert load_rooms(path) == two_rooms
+
+
+def test_empty_list_from_the_app_means_all_rooms_deleted():
+    assert rooms_from_app("[]") == {}
+
+
+@pytest.mark.parametrize(
+    "app_json",
+    [
+        '[{"name": "A", "area": [[0, 0], [1, 0], [1, 1]]',  # broken JSON
+        '{"name": "A"}',  # one room instead of a list
+        '[{"name": 1.1, "area": [[0, 0], [1, 0], [1, 1]], "goal": {"x": 0, "y": 0, "yaw": 0}}]',  # number
+        '[{"name": "", "area": [[0, 0], [1, 0], [1, 1]], "goal": {"x": 0, "y": 0, "yaw": 0}}]',  # empty name
+        '[{"name": "A", "area": [[0, 0], [1, 0], [1, 1]], "goal": {"x": 0, "y": 0}}]',  # no yaw
+    ],
+)
+def test_bad_data_from_the_app_gives_a_clear_error(app_json):
+    # A ValueError the web server can answer with "400 Bad Request"
+    with pytest.raises(ValueError):
+        rooms_from_app(app_json)
 
 
 @pytest.mark.parametrize(
