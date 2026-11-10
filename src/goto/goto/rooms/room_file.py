@@ -37,23 +37,36 @@ class Room:
 
 
 def load_rooms(path: str | Path) -> dict[str, Room]:
-    """Reads a room file into {name: Room}. A missing file means: no rooms yet."""
+    """
+    Reads a room file into {name: Room}. A missing file means: no rooms yet.
+    Every problem in the file (it is edited by hand) is raised as a ValueError with a clear message.
+    """
     path = Path(path)
     if not path.exists():
         return {}
 
-    rooms = {}
-    content = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        content = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as error:
+        raise ValueError(f"{path}: not valid YAML (check the indentation): {error}") from error
     if not isinstance(content, dict):
         raise ValueError(f"{path}: expected 'rooms:' at the top of the file")
+
+    rooms = {}
     for entry in content.get("rooms") or []:  # "or []": "rooms:" with nothing under it, e.g. all deleted
-        room = Room(
-            name=str(entry["name"]),
-            area=[(float(x), float(y)) for x, y in entry["area"]],
-            goal_x=float(entry["goal"]["x"]),
-            goal_y=float(entry["goal"]["y"]),
-            goal_yaw=float(entry["goal"]["yaw"]),
-        )
+        try:
+            room = Room(
+                name=entry["name"],
+                area=[(float(x), float(y)) for x, y in entry["area"]],
+                goal_x=float(entry["goal"]["x"]),
+                goal_y=float(entry["goal"]["y"]),
+                goal_yaw=float(entry["goal"]["yaw"]),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(f"{path}: room entry {entry!r} needs name, area and goal (x, y, yaw)") from error
+        if not isinstance(room.name, str):
+            # YAML reads  name: 1.10  as the number 1.1 - the app would send "1.10" and not find it
+            raise ValueError(f"{path}: room name {room.name} must be in quotes, e.g. name: '{room.name}'")
         if len(room.area) < 3:
             raise ValueError(f"{path}: room '{room.name}' needs at least 3 corners")
         if room.name in rooms:

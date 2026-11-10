@@ -76,3 +76,21 @@ bash scripts/build_run_define_rooms.sh [world]
 Opens the map image of a mapped world. For each room: type its name in the terminal, click its corners in the
 window, then where the robot should stop and a point in the direction it should face. The rooms are saved in
 `maps/<world>_rooms.yaml` (in metres on the map). After continuing a map, check that the rooms still fit.
+
+### Drive to a room (planner_node)
+
+While `build_run_sim_navigation.sh` runs, send a room name from the world's room file:
+
+```shell
+ros2 topic pub --once -w 1 /goto_room std_msgs/String "data: '1.12'"   # -w 1: wait for the planner, or the message can get lost
+ros2 topic echo /navigation_status
+```
+
+**Interface for the app** (`web_server_node`):
+
+| Topic | Type | Direction | Content |
+|---|---|---|---|
+| `/goto_room` | `std_msgs/String` | app → planner | room name as in `maps/<world>_rooms.yaml`; an empty string stops the trip |
+| `/navigation_status` | `std_msgs/String` (JSON) | planner → app | `{"room": "1.12", "status": "driving", "distance_left": 3.2}`; status: `driving`, `arrived`, `failed`, `canceled`, `unknown_room`, `nav2_not_ready` |
+
+`/navigation_status` keeps its last message (`TRANSIENT_LOCAL`), so a late subscriber gets it at once.

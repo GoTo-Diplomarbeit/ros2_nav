@@ -73,9 +73,12 @@ run_in_docker() {
     # that on), so do it ourselves
     trap stop_script_in_container HUP TERM
 
-    # TZ: the container runs on UTC; ROS_DOMAIN_ID: keeps two sims on one network apart
+    # TZ: the container runs on UTC; ROS_DOMAIN_ID: keeps two sims on one network apart;
+    # PYTHONDONTWRITEBYTECODE: nodes run from the source folder (--symlink-install), and Python's
+    # cache files there would belong to root
     docker compose exec \
         -e TZ="$(cat /etc/timezone 2>/dev/null)" \
+        -e PYTHONDONTWRITEBYTECODE=1 \
         -e ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}" \
         "$SERVICE" bash "$CONTAINER_SCRIPT" "$@"
     exit $?

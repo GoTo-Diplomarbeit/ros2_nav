@@ -62,6 +62,24 @@ def test_non_ascii_room_names_are_kept(tmp_path):
     assert load_rooms(path) == rooms
 
 
+@pytest.mark.parametrize(
+    "content",
+    [
+        "rooms:\n  - {name: A, area: [[0, 0], [1, 0], [1, 1]]\n",  # broken YAML (bracket missing)
+        "rooms:\n  - {name: A, area: [[0, 0], [1, 0], [1, 1]]}\n",  # no goal
+        "rooms:\n  - just a text\n",  # not a room at all
+        "rooms:\n  - {name: 1.10, area: [[0, 0], [1, 0], [1, 1]], goal: {x: 0, y: 0, yaw: 0}}\n",  # name w/o quotes
+    ],
+)
+def test_broken_hand_edits_give_a_clear_error(tmp_path, content):
+    # A ValueError the planner can catch - anything else would crash the node
+    path = tmp_path / "rooms.yaml"
+    path.write_text(content)
+
+    with pytest.raises(ValueError):
+        load_rooms(path)
+
+
 def test_room_with_two_corners_is_rejected(tmp_path):
     path = tmp_path / "rooms.yaml"
     path.write_text("rooms:\n  - {name: A, area: [[0, 0], [1, 0]], goal: {x: 0, y: 0, yaw: 0}}\n")

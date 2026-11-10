@@ -60,8 +60,8 @@ after_stop() {
 
 # Called once RTAB-Map has found the robot on the continued map
 switch_to_mapping() {
-    touch "$LOG_DIR/robot_found"   # for before_stop
     if ros2 service call /rtabmap/set_mode_mapping std_srvs/srv/Empty > /dev/null 2>&1; then
+        touch "$LOG_DIR/robot_found"   # for before_stop: the map is being extended now
         echo ">>> Robot found on the map - new areas are added from now on."
     else
         echo ">>> Robot found, but switching to mapping failed - nothing new is added. Try by hand:"
