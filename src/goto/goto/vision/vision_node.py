@@ -4,6 +4,8 @@ from datetime import datetime
 from enum import Enum
 
 import cv2
+import torch
+import ultralytics.utils.torch_utils as ultralytics_torch_utils
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 from std_msgs.msg import Empty, String
@@ -29,6 +31,19 @@ FACE_TOP_FRACTION = 0.4
 
 # extra margin around the person box when cropping the saved photo (fraction of box width / height)
 CROP_PADDING = 0.1
+
+# YOLO runs at most this often (~3 Hz). The debug/preview image is still published for every
+# camera frame, with the last detections drawn on it - boxes up to this old look fine in a preview,
+# and the countdown/capture logic doesn't need more. Lower = smoother boxes, more CPU.
+DETECTION_PERIOD_S = 0.3
+
+# CPU threads PyTorch may use for inference. Its default (one per core) let the two models take
+# ~6.5 cores and starved Gazebo / RTAB-Map / Nav2. Set before the models are loaded.
+TORCH_THREADS = 2
+
+# Size YOLO scales the frame to (longest side). 640 = the camera's full width (no downscaling).
+# 320 is ~4x cheaper but may miss small faces - people far away are rejected by MIN_PERSON_AREA anyway.
+INFERENCE_IMAGE_SIZE = 640
 
 COUNTDOWN_S = 5.0
 PERSON_TIMEOUT_S = 10.0  # how long to wait for a person after the countdown
@@ -126,12 +141,17 @@ class VisionNode(NodeWrapper):
     def _setup_channels(self):
         self._logger = self.node.get_logger()
 
+        # torch.set_num_threads alone is not enough: on its first inference ultralytics calls it again
+        # with its own NUM_THREADS (min(8, cores - 1)), so lower that constant too
+        torch.set_num_threads(TORCH_THREADS)
+        ultralytics_torch_utils.NUM_THREADS = TORCH_THREADS
+
         os.makedirs(os.path.dirname(PERSON_MODEL_PATH), exist_ok=True)
-        self._person_recognition = ImageRecognition(PERSON_MODEL_PATH)
-        self._face_recognition = ImageRecognition(FACE_MODEL_URL)
+        self._person_recognition = ImageRecognition(PERSON_MODEL_PATH, image_size=INFERENCE_IMAGE_SIZE)
+        self._face_recognition = ImageRecognition(FACE_MODEL_URL, image_size=INFERENCE_IMAGE_SIZE)
 
         self._bridge = CvBridge()
-        self._busy = False  # skip incoming frames while the last one is still being processed
+        self._last_detection_time = float("-inf")  # time.monotonic() of the last YOLO run
 
         os.makedirs(SAVE_DIR, exist_ok=True)
 
@@ -195,20 +215,27 @@ class VisionNode(NodeWrapper):
 
     def _image_callback(self, image: Image) -> None:
         # only activate when the current global state is REGISTER_PERSON
-        if self._busy or not self.is_active():
+        if not self.is_active():
             return
-        self._busy = True
-        try:
+
+        frame = self._bridge.imgmsg_to_cv2(image, desired_encoding="bgr8")
+        target_rectangle = target_rectangle_for(frame)
+
+        # YOLO only every DETECTION_PERIOD_S; frames in between just get the last boxes drawn on them
+        now = time.monotonic()
+        detect = now - self._last_detection_time >= DETECTION_PERIOD_S
+        if detect:
+            self._last_detection_time = now
             # run both models on the same clean frame (never on an image with boxes drawn on it)
-            frame = self._bridge.imgmsg_to_cv2(image, desired_encoding="bgr8")
             faces = self._face_recognition.get_results(frame)
             people = self._person_recognition.get_results(frame)
-            target_rectangle = target_rectangle_for(frame)
 
-            self._publish_debug_image(frame, target_rectangle, image.header)
+        self._publish_debug_image(frame, target_rectangle, image.header)
+
+        # the capture logic only sees fresh detections, so a photo is always cropped from the
+        # frame its boxes were found in
+        if detect:
             self._update_capture(frame, people, faces, target_rectangle)
-        finally:
-            self._busy = False
 
     # draw face boxes, person boxes and the target rectangle onto one copy of the frame and publish it
     def _publish_debug_image(self, frame, target_rectangle, header) -> None:
