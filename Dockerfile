@@ -1,9 +1,12 @@
 # -- Install ubuntu and ros:jazzy
-FROM ros:jazzy AS dev
+FROM ros:jazzy AS base
 LABEL authors="Peter Promok"
 
 # -- Refresh package list
 RUN apt-get update && rosdep update
+
+# -- Install nmcli to control the hotspot of the host
+RUN apt-get update && apt-get install -y network-manager
 
 # ----------------------------------------
 # | Install the required python packages |
@@ -33,9 +36,6 @@ COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --break-system-packages -r requirements.txt
 
-# -- Add the ROS python folders to Python's search path via a .pth file (so PyCharm finds rclpy etc.)
-RUN printf "/opt/ros/jazzy/lib/python3.12/site-packages\n/opt/ros/jazzy/local/lib/python3.12/dist-packages\n" > /usr/local/lib/python3.12/dist-packages/ros.pth
-
 # -- Add env variables for packages which are installed via ros2 rather than pip
 ENV AMENT_PREFIX_PATH=/opt/ros/jazzy
 ENV PYTHONPATH=/opt/ros/jazzy/lib/python3.12/site-packages:/opt/ros/jazzy/local/lib/python3.12/dist-packages
@@ -52,6 +52,32 @@ COPY /src/goto/package.xml .
 # Install every package declared inside the file
 RUN rosdep install --from-paths . --ignore-src -r -y
 
+# ------------------------------------------------
+# | Robot image (no simulator, runs on the robot) |
+# ------------------------------------------------
+FROM base AS robot
+
+# -- Source ROS and the goto project automatically in every interactive terminal
+# Source ROS2
+RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
+# Source our project
+RUN echo "source /ws/install/setup.bash 2>/dev/null || true" >> /root/.bashrc
+
+# -- Open a terminal when executing docker (can be overridden by other commands)
+# Open terminals in the project folder
+WORKDIR /ws
+
+# Run commands as bash (can be overriden eg. for using python)
+CMD ["bash"]
+
+# --------------------------------------------------
+# | Dev image (with simulator and PyCharm fixes)   |
+# --------------------------------------------------
+FROM base AS dev
+
+# -- Add the ROS python folders to Python's search path via a .pth file (so PyCharm finds rclpy etc.)
+RUN printf "/opt/ros/jazzy/lib/python3.12/site-packages\n/opt/ros/jazzy/local/lib/python3.12/dist-packages\n" > /usr/local/lib/python3.12/dist-packages/ros.pth
+
 # ---------------------------------------
 # | Clone and build the unitree_go2_sim |
 # ---------------------------------------
@@ -66,15 +92,6 @@ RUN git clone --recursive https://github.com/GoTo-Diplomarbeit/unitree_go2_ros2 
 RUN rosdep install --from-paths . --ignore-src -r -y
 # Build the unitree_go2_ros2 project
 RUN . /opt/ros/jazzy/setup.sh && colcon build
-
-# -- Add the ROS python folders to Python's search path via a .pth file (so PyCharm finds rclpy etc.)
-RUN printf "/opt/ros/jazzy/lib/python3.12/site-packages\n/opt/ros/jazzy/local/lib/python3.12/dist-packages\n" > /usr/local/lib/python3.12/dist-packages/ros.pth
-
-# -- Add env variables for packages which are installed via ros2 rather than pip
-ENV AMENT_PREFIX_PATH=/opt/ros/jazzy
-ENV PYTHONPATH=/opt/ros/jazzy/lib/python3.12/site-packages:/opt/ros/jazzy/local/lib/python3.12/dist-packages
-ENV LD_LIBRARY_PATH=/opt/ros/jazzy/lib
-ENV ROS_DISTRO=jazzy
 
 # ------------------
 # | Finished setup |
