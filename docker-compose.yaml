@@ -48,9 +48,20 @@ services:
     <<: *nvidia
     image: ghcr.io/goto-diplomarbeit/ros2_nav:latest
 
-  # Tests (uses the dev image)
+  robot:
+    image: ghcr.io/goto-diplomarbeit/ros2_nav:robot
+    network_mode: host
+    volumes:
+      - *ws
+    stdin_open: true
+    tty: true
+    build:
+      context: .
+      target: robot
+
+  # Tests (uses the robot image, no simulator)
   ci:
-    image: ghcr.io/goto-diplomarbeit/ros2_nav:latest
+    image: ghcr.io/goto-diplomarbeit/ros2_nav:robot
     volumes:
       - *ws
     command: pytest /ws/src/goto/test/
