@@ -49,6 +49,11 @@ bash scripts/build_run_project.sh
 bash scripts/launch_gazebo.sh
 ```
 
+On Arch/CachyOS Gazebo's GUI may open blank and log `Requesting list of world names` forever, because
+gz-transport discovers the server via multicast and Arch has no multicast route on the loopback interface.
+The container therefore sets `GZ_IP=127.0.0.1` (see `docker-compose.yaml`), so gz-transport uses loopback
+instead - no host changes needed. After updating, recreate the container once (`docker compose up -d`).
+
 ### Map a world (RTAB-Map, drive with the keyboard)
 
 ```shell

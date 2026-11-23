@@ -14,6 +14,13 @@ x-gui: &gui
   environment:
     - DISPLAY=${DISPLAY}
     - XAUTHORITY=/tmp/.docker.xauth
+    # Gazebo's GUI and server find each other over gz-transport, which by default
+    # uses UDP multicast for discovery. On Arch (and CachyOS etc.) the loopback
+    # interface has no multicast route, so the two never meet: the window opens but
+    # stays blank and the log repeats "Requesting list of world names". Forcing
+    # gz-transport onto loopback (everything runs in this one container anyway)
+    # fixes discovery without touching the host network.
+    - GZ_IP=127.0.0.1
   devices:
     - /dev/dri:/dev/dri
   stdin_open: true
@@ -27,6 +34,8 @@ x-nvidia: &nvidia
     - XAUTHORITY=/tmp/.docker.xauth
     # Default is compute-only; "all" injects the NVIDIA OpenGL/EGL libs so Gazebo skips llvmpipe
     - NVIDIA_DRIVER_CAPABILITIES=all
+    # See x-gui: without this Gazebo's GUI can't discover the server on Arch
+    - GZ_IP=127.0.0.1
   gpus: all
 
 services:
