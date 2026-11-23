@@ -15,14 +15,20 @@ SIM_EXTRA_ARGS="disable_d455:=true disable_camera:=true disable_lidar_l1:=true"
 RTABMAP_ATTEMPTS=3              # restarts if RTAB-Map gets stuck at startup
 RTABMAP_STOP_SECONDS=60         # time RTAB-Map gets to save the map (a running map update took 16 s)
 SERVICE="${SERVICE:-release}"   # Docker service; "release-nvidia" renders on the NVIDIA GPU
+GUI="${GUI:-true}"              # "false" = Gazebo without its window (about one CPU core and some GPU memory less)
+ODOM_SCALER="${ODOM_SCALER:-1.35}"   # the simulator's image has 0.9: its odometry reports only about 61% of the real
+                                     # distance, with 1.35 about 96% (measured 2026-11-17). Set ODOM_SCALER=0.9 to get the image's value.
 WORLDS_DIR=/unitree_go2_sim/install/unitree_go2_description/share/unitree_go2_description/worlds
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # the project folder (/ws in the container)
 MAP_DIR="$REPO_DIR/maps"
 
-# Ids of what this run started, so the cleanup stops exactly these
+# Ids of what this run started, so the cleanup stops exactly these.
+# RTABMAP_ID is the SLAM launch: the slam_toolbox script puts its launch there too and sets SLAM_NAME
+# for the messages.
 SIM_ID=""
 RTABMAP_ID=""
+SLAM_NAME="RTAB-Map"
 WATCHER_ID=""
 
 # Programs of which only one copy may run - two would fight over /map and map->odom.
@@ -73,13 +79,15 @@ run_in_docker() {
     # that on), so do it ourselves
     trap stop_script_in_container HUP TERM
 
-    # TZ: the container runs on UTC; ROS_DOMAIN_ID: keeps two sims on one network apart;
+    # TZ: the container runs on UTC; ROS_DOMAIN_ID: keeps two sims on one network apart; GUI, ODOM_SCALER: see above;
     # PYTHONDONTWRITEBYTECODE: nodes run from the source folder (--symlink-install), and Python's
     # cache files there would belong to root
     docker compose exec \
         -e TZ="$(cat /etc/timezone 2>/dev/null)" \
         -e PYTHONDONTWRITEBYTECODE=1 \
         -e ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}" \
+        -e GUI="$GUI" \
+        -e ODOM_SCALER="$ODOM_SCALER" \
         "$SERVICE" bash "$CONTAINER_SCRIPT" "$@"
     exit $?
 }
@@ -118,9 +126,14 @@ setup_run() {
     trap 'exit 130' INT TERM HUP
     refuse_if_already_running   # again, in case the script was started inside the container
 
+    # A world of this project (worlds/<name>.sdf) wins over one of the simulator's image.
+    # SIM_WORLD is what the simulator gets, WORLD stays the short name for messages.
+    SIM_WORLD="$WORLD"
+    [[ -f "$REPO_DIR/worlds/$WORLD.sdf" ]] && SIM_WORLD="$REPO_DIR/worlds/$WORLD.sdf"
+
     # Catch a wrong world name now, not after waiting minutes for the simulator
-    if [[ ! -f "$WORLD" && ! -f "$WORLDS_DIR/$WORLD.sdf" ]]; then
-        echo "Unknown world '$WORLD'. Available: $(ls "$WORLDS_DIR" | sed 's/\.sdf$//' | tr '\n' ' ')"
+    if [[ ! -f "$SIM_WORLD" && ! -f "$WORLDS_DIR/$WORLD.sdf" ]]; then
+        echo "Unknown world '$WORLD'. Available: $(ls "$WORLDS_DIR" "$REPO_DIR/worlds" | grep '\.sdf$' | sed 's/\.sdf$//' | tr '\n' ' ')"
         exit 1
     fi
 
@@ -194,10 +207,10 @@ stop_everything() {
     echo "Stopping everything (saving the map can take up to a minute) ..."
     if [[ -n "$RTABMAP_ID" ]] && ! kill -0 "$RTABMAP_ID" 2>/dev/null; then
         result=2
-        echo "RTAB-Map had stopped by itself during the run - the map lacks what came after (see its log)."
+        echo "$SLAM_NAME had stopped by itself during the run - the map lacks what came after (see its log)."
     elif ! stop_session "$RTABMAP_ID" "$RTABMAP_STOP_SECONDS"; then
         result=1
-        echo "RTAB-Map had to be killed - the map may be incomplete."
+        echo "$SLAM_NAME had to be killed - the map may be incomplete."
     fi
     stop_session "$SIM_ID"
     give_files_back
@@ -236,15 +249,60 @@ save_map_image() {
     fi
 }
 
+# Sets odom_scaler in the installed gait.yaml of the simulator (the walking controller and the state estimation read it
+# at start). Same approach as below: the copy in the container is changed, the image stays as it is, and it is done again
+# at every start, so a new container needs nothing. Args: value [gait.yaml]. Returns 1 if it can't be set.
+set_odom_scaler() {
+    local value=$1
+    local gait_file=${2:-"$(ros2 pkg prefix unitree_go2_sim)/share/unitree_go2_sim/config/gait/gait.yaml"}
+    [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]] || return 1
+    grep -qE "^ *odom_scaler:" "$gait_file" || return 1
+    sed -i -E "s/^( *odom_scaler:) *[0-9.]+/\1 $value/" "$gait_file"
+}
+
+# The simulator's launch file declares the argument "gui" but never uses it. This adds the missing part: with
+# gui:=false Gazebo gets "-s" (server only). It patches the copy of the file installed in the container (the
+# image stays as it is, and the patch is applied again at every start, so a new container needs nothing).
+# Remove it once the simulator repo handles gui itself. Returns 1 if the file isn't as expected.
+make_simulator_headless_capable() {
+    local launch_file=${1:-"$(ros2 pkg prefix unitree_go2_sim)/share/unitree_go2_sim/launch/unitree_go2_launch.py"}
+    grep -q "gui_patch" "$launch_file" && return 0
+    python3 - "$launch_file" <<'PY'
+import sys
+
+path = sys.argv[1]
+text = open(path).read()
+old = "'gz_args': world_path + ' -r'  # Add -r flag to start unpaused"
+new = "'gz_args': world_path + ' -r' + ('' if LaunchConfiguration('gui').perform(context) == 'true' else ' -s')  # gui_patch"
+if old not in text:
+    sys.exit(1)
+open(path, "w").write(text.replace(old, new, 1))
+PY
+}
+
 # Starts the simulator and waits until the lidar and the odometry run. Sets SIM_ID.
 # static_map_to_odom:=false - RTAB-Map publishes map->odom, so the sim must not.
 # rviz:=false - navigation_rtabmap.launch.py brings its own rviz.
 start_simulator() {
     echo "[1/3] Starting the simulator, world '$WORLD' (log: $LOG_DIR/sim.log)"
-    # $SIM_EXTRA_ARGS without quotes on purpose, so "a:=1 b:=2" becomes two arguments
+    if set_odom_scaler "$ODOM_SCALER"; then
+        echo "      odometry scaler $ODOM_SCALER"
+    else
+        echo "      Could not set the odometry scaler (ODOM_SCALER='$ODOM_SCALER' or gait.yaml not as expected): the image's value is used."
+    fi
+    local gui_args=""
+    if [[ "$GUI" == false ]]; then
+        if make_simulator_headless_capable; then
+            gui_args="gui:=false"
+            echo "      without the Gazebo window (GUI=false)"
+        else
+            echo "      GUI=false is not possible: the simulator's launch file is different than expected. Starting with the window."
+        fi
+    fi
+    # $SIM_EXTRA_ARGS and $gui_args without quotes on purpose, so "a:=1 b:=2" becomes two arguments
     SIM_ID=$(start_in_background "$LOG_DIR/sim.log" \
         ros2 launch unitree_go2_sim unitree_go2_launch.py static_map_to_odom:=false rviz:=false \
-        world:="$WORLD" $SIM_EXTRA_ARGS)
+        world:="$SIM_WORLD" $SIM_EXTRA_ARGS $gui_args)
 
     echo "      waiting for the lidar ..."
     wait_for_message /velodyne_points/points 180 "$SIM_ID"
@@ -298,4 +356,68 @@ watch_localization() {
             echo "    If it doesn't, click \"2D Pose Estimate\" in rviz on its real position."
         fi
     done
+}
+
+# ---- Shared by build_run_sim_mapping.sh and build_run_sim_autonomous_mapping.sh ------------------------
+
+# Prepares maps/<world>.db. NEW_MAP=true moves the old map aside; otherwise an existing map is
+# continued. Sets CONTINUE_MAP and makes maps/<world>.backup.db, the state before this run.
+prepare_map_file() {
+    mkdir -p "$MAP_DIR"
+    if [[ "$NEW_MAP" == true && -f "$MAP_FILE" ]]; then
+        local old_map="${MAP_NAME}_old_$(date +%Y-%m-%d_%H-%M-%S).db"
+        mv "$MAP_FILE" "$MAP_DIR/$old_map"
+        rm -f "$MAP_DIR/$MAP_NAME.backup.db"   # belonged to the old map, which is kept in $old_map
+        echo "--new: the old map was moved to maps/$old_map"
+        # The rooms are in the old map's coordinates, so they go with it. The image is made new at the end.
+        if [[ -f "$MAP_DIR/${MAP_NAME}_rooms.yaml" ]]; then
+            mv "$MAP_DIR/${MAP_NAME}_rooms.yaml" "$MAP_DIR/${old_map%.db}_rooms.yaml"
+            echo "       its rooms were moved to maps/${old_map%.db}_rooms.yaml - define the rooms again"
+        fi
+        rm -f "$MAP_DIR/$MAP_NAME.png" "$MAP_DIR/$MAP_NAME.yaml"
+    fi
+    if [[ -f "$MAP_FILE" ]]; then
+        CONTINUE_MAP=true
+        cp "$MAP_FILE" "$MAP_DIR/$MAP_NAME.backup.db"
+        echo "Continuing maps/$MAP_NAME.db"
+    else
+        echo "New map: maps/$MAP_NAME.db"
+    fi
+}
+
+# Called once RTAB-Map has found the robot on the continued map (see watch_localization)
+switch_to_mapping() {
+    if ros2 service call /rtabmap/set_mode_mapping std_srvs/srv/Empty > /dev/null 2>&1; then
+        touch "$LOG_DIR/robot_found"   # for mapping_before_stop: the map is being extended now
+        echo ">>> Robot found on the map - new areas are added from now on."
+    else
+        echo ">>> Robot found, but switching to mapping failed - nothing new is added. Try by hand:"
+        echo "    ros2 service call /rtabmap/set_mode_mapping std_srvs/srv/Empty"
+    fi
+}
+
+# The hooks of stop_on_exit for the mapping scripts. A script calls them from its own before_stop and
+# after_stop. Needs NEW_MAP, CONTINUE_MAP and MAP_IMAGE_SAVED to be set by the script.
+#
+# before_stop saves the map image while RTAB-Map still runs - but only if this run really built
+# the map: a new map, or a continued one after the robot was found (before that RTAB-Map only
+# localizes, and /map may be incomplete).
+mapping_before_stop() {
+    if [[ "$CONTINUE_MAP" == false || -f "$LOG_DIR/robot_found" ]]; then
+        save_map_image
+    else
+        echo "The robot was never found on the map - the map image is left as it was."
+    fi
+}
+
+mapping_after_stop() {
+    [[ -z "$RTABMAP_ID" ]] && return   # the run ended before RTAB-Map started
+    if [[ $1 == 0 ]]; then
+        echo "Map saved in maps/$MAP_NAME.db. Navigate on it: bash scripts/build_run_sim_navigation.sh $WORLD"
+    elif [[ "$CONTINUE_MAP" == true ]]; then
+        echo "The map as it was before this run: maps/$MAP_NAME.backup.db"
+    fi
+    if [[ "$MAP_IMAGE_SAVED" == true && -f "$MAP_DIR/${MAP_NAME}_rooms.yaml" ]]; then
+        echo "The map changed - check the rooms still fit: bash scripts/build_run_define_rooms.sh $WORLD"
+    fi
 }

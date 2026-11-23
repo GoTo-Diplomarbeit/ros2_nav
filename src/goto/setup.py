@@ -35,6 +35,9 @@ setup(
             "web_server_node = goto.communication.server.web_server_node:main",
             "hotspot_node = goto.communication.hotspot_node:main",
             "state_node = goto.state.state_node:main",
+            "autonomous_mapping_node = goto.mapping.autonomous_mapping_node:main",
+            "autonomous_mapping_keys = goto.mapping.autonomous_mapping_keys:main",
+            "scan_body_filter = goto.mapping.scan_body_filter:main",
         ],
     },
 )
