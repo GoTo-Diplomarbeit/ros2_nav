@@ -54,7 +54,7 @@ save_pose_graph() {
 }
 
 # The hooks of stop_on_exit in sim_common.sh
-before_stop() { stop_session "$EXPLORER_ID"; save_pose_graph; save_map_image; }
+before_stop() { stop_session "$EXPLORER_ID"; stop_drift_monitor; save_pose_graph; save_map_image; }
 after_stop() {
     [[ -z "$RTABMAP_ID" ]] && return   # the run ended before slam_toolbox started
     [[ $1 != 0 ]] && echo "Check the map: slam_toolbox did not stop cleanly."
@@ -97,6 +97,7 @@ esac
 # wait_for_rtabmap:=false - slam_toolbox sends no /info, which the explorer waits for with RTAB-Map
 EXPLORER_ID=$(start_in_background "$LOG_DIR/explorer.log" \
     ros2 run goto autonomous_mapping_node --ros-args -p wait_for_rtabmap:=false)
+start_drift_monitor
 
 echo "[3/3] Keys (below) - keep this window focused. x or Ctrl+C stops everything and saves the map."
 ros2 run goto autonomous_mapping_keys --ros-args -p speed:=$TELEOP_SPEED -p turn:=$TELEOP_TURN

@@ -17,13 +17,12 @@
        Doors are 1.0 m (storage 0.8 m, library/canteen 1.4 m, lobby opening 6 m, entrances 2 m).
        Both entrances lead into a closed porch, so the robot can't drive out. Class B's door is ajar. -->
   <world name="default">
-    <!-- 2 ms steps instead of the usual 1 ms: Gazebo publishes /clock once per step, and every ROS node with
-         use_sim_time wakes up for each message, so 500 Hz instead of 1000 Hz saves a lot of CPU.
-         step x rate = real_time_factor (0.002 x 500 = 1.0). The controllers (250 Hz) and sensors (10 - 100 Hz) fit.
-         If the robot jitters, slips or falls here, go back to 0.001 and 1000 (the other worlds use that). -->
-    <physics name="2ms" type="bullet-featherstone">
-      <max_step_size>0.002</max_step_size>
-      <real_time_update_rate>500</real_time_update_rate>
+    <!-- 1 ms steps, like the simulator's other worlds. 2 ms (500 Hz) saved CPU on the school laptop, but the robot may
+         rock, slip or flip with it (suspected, not proven). Gazebo publishes /clock once per step, so 1000 Hz costs more CPU:
+         on a weak PC you can try 0.002 and 500 again (step x rate = real_time_factor), but watch the robot's walking. -->
+    <physics name="1ms" type="bullet-featherstone">
+      <max_step_size>0.001</max_step_size>
+      <real_time_update_rate>1000</real_time_update_rate>
       <real_time_factor>1.0</real_time_factor>
     </physics>
 

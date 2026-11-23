@@ -135,10 +135,11 @@ def test_robot_cannot_leave_the_building(reachable):
 
 
 def test_the_physics_step_and_update_rate_match_the_real_time_factor(world):
-    # Gazebo wants step x rate = factor. 0.002 s steps = 500 Hz /clock, half of the simulator's usual 1000 Hz.
+    # Gazebo wants step x rate = factor. 0.001 s steps = 1000 Hz /clock, the simulator's usual value: with 0.002 the
+    # robot may rock and flip.
     physics = world.find("world/physics")
     step = float(physics.findtext("max_step_size"))
     rate = float(physics.findtext("real_time_update_rate"))
     factor = float(physics.findtext("real_time_factor"))
     assert step * rate == pytest.approx(factor)
-    assert step == pytest.approx(0.002)
+    assert step == pytest.approx(0.001)

@@ -5,8 +5,11 @@ import pytest
 
 from goto.mapping.frontiers import (
     GridInfo,
+    cells_with_line_of_sight,
     choose_goal,
     classify_result,
+    costmap_to_grid,
+    costmap_wall_distance_m,
     find_frontier_clusters,
     frontier_still_exists,
     passable_mask,
@@ -315,3 +318,132 @@ def test_pick_goal_cell_falls_back_to_the_roomiest_cell_and_handles_no_cell():
     assert pick_goal_cell(reachable, wall_distance, (5, 2), 3, preferred_m=5.0) == (5, 0)
     assert pick_goal_cell(np.zeros((11, 11), dtype=bool), wall_distance, (5, 5), 3, preferred_m=0.5) is None
     assert pick_goal_cell(reachable, wall_distance, (500, 500), 3, preferred_m=0.5) is None
+
+
+# -- The costmap as input
+
+
+def test_costmap_to_grid_blocks_everything_the_robots_centre_can_not_use_and_keeps_unknown():
+    costmap = np.array([[-1, 0, 50, 98, 99, 100]], dtype=np.int8)
+
+    assert costmap_to_grid(costmap).tolist() == [[-1, 0, 0, 0, 100, 100]]
+
+
+def test_costmap_wall_distance_is_measured_to_the_obstacle_and_not_to_the_blocked_ring():
+    costmap = np.array([[100, 99, 99, 50, 0, 0]], dtype=np.int8)
+
+    distance = costmap_wall_distance_m(costmap, INFO)
+
+    assert distance[0] == pytest.approx([0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
+    assert np.isinf(costmap_wall_distance_m(np.zeros((2, 2), dtype=np.int8), INFO)).all()
+
+
+def test_a_frontier_in_the_blocked_ring_of_a_wall_is_no_frontier():
+    # free cells next to unknown, but inside the ring of 99 around a wall: the robot can never stand there
+    costmap = np.array([[-1, -1, -1], [-1, 99, 100], [-1, 0, 0], [-1, 0, 0]], dtype=np.int8)
+
+    clusters = find_frontier_clusters(costmap_to_grid(costmap), INFO, costmap_wall_distance_m(costmap, INFO), 0.0)
+
+    # Only the two cells of column 1 below the blocked one count. The blocked cell (row 1) would make it three cells
+    # and move the centroid up by half a cell.
+    assert len(clusters) == 1
+    assert clusters[0].size_m == pytest.approx(0.2)
+    assert clusters[0].centroid == pytest.approx((0.15, 0.3))
+
+
+# -- A frontier behind a wall
+
+
+def wall_with_pocket():
+    """
+    The robot's room (left, columns 2 - 15), a wall one cell thick with a one cell hole in it (column 16, row 10),
+    and a pocket behind it (columns 17 - 28) that opens to unknown space in the east (column 29, rows 8 - 12).
+    Like a wall a lidar ray went through.
+    """
+    grid = np.full((21, 40), -1, dtype=np.int8)
+    grid[1:20, 1:30] = 100
+    grid[2:19, 2:16] = 0
+    grid[2:19, 17:29] = 0
+    grid[10, 16] = 0
+    grid[8:13, 29] = 0
+    return grid
+
+
+def test_a_frontier_behind_a_thin_wall_is_unreachable_even_when_a_goal_cell_is_in_range():
+    grid = wall_with_pocket()
+    clusters = clusters_of(grid, min_size_m=0.25)
+    assert len(clusters) == 1
+    robot = cell_to_xy(10, 8)
+
+    # pullback 3 m: the robot's room lies within reach of the frontier, on the other side of the wall
+    selection = goal_for(grid, robot, clusters, pullback_m=3.0)
+
+    assert selection.goal is None
+    assert (selection.clusters, selection.unreachable) == (1, 1)
+
+
+def test_the_same_frontier_is_reachable_when_the_wall_has_a_real_gap():
+    grid = wall_with_pocket()
+    grid[7:14, 16] = 0  # a 0.7 m door instead of the hole
+    clusters = clusters_of(grid, min_size_m=0.25)
+
+    selection = goal_for(grid, cell_to_xy(10, 8), clusters, pullback_m=3.0)
+
+    assert selection.goal is not None
+    assert selection.goal.x > cell_to_xy(0, 16)[0]  # the goal is behind the door, near the frontier
+
+
+def test_cells_with_line_of_sight_stop_at_walls_but_not_at_the_target():
+    obstacles = np.zeros((11, 11), dtype=bool)
+    obstacles[:, 5] = True
+    cells = np.array([[5, 2], [5, 7], [2, 9], [5, 9]])
+
+    visible = cells_with_line_of_sight(obstacles, cells, (5, 9))
+
+    assert visible.tolist() == [False, True, True, True]  # the target in a wall is no reason to refuse
+    obstacles[5, 9] = True
+    assert cells_with_line_of_sight(obstacles, cells, (5, 9)).tolist() == [False, True, True, True]
+    assert cells_with_line_of_sight(obstacles, np.zeros((0, 2), dtype=int), (5, 9)).tolist() == []
+
+
+def test_pick_goal_cell_ignores_cells_that_can_not_see_the_frontier():
+    reachable = np.ones((11, 11), dtype=bool)
+    reachable[:, 5:] = False  # the robot's side of a wall in column 5
+    wall_distance = np.ones((11, 11))
+    obstacles = np.zeros((11, 11), dtype=bool)
+    obstacles[:, 5] = True
+
+    assert pick_goal_cell(reachable, wall_distance, (5, 8), 10, preferred_m=0.5) == (5, 4)  # through the wall
+    assert pick_goal_cell(reachable, wall_distance, (5, 8), 10, preferred_m=0.5, obstacles=obstacles) is None
+
+
+# -- Candidates for the planner
+
+
+def test_the_candidates_are_the_nearest_goals_nearest_first():
+    clusters = clusters_of(ROOM_WITH_TWO_DOORS, min_size_m=0.25)
+    assert len(clusters) == 2
+
+    selection = goal_for(ROOM_WITH_TWO_DOORS, cell_to_xy(4, 3), clusters)  # nearer to the west door
+
+    assert len(selection.candidates) == 2
+    assert selection.candidates[0].distance < selection.candidates[1].distance
+    assert selection.goal is selection.candidates[0]
+
+
+def test_the_number_of_candidates_is_capped():
+    clusters = clusters_of(ROOM_WITH_TWO_DOORS, min_size_m=0.25)
+
+    selection = goal_for(ROOM_WITH_TWO_DOORS, cell_to_xy(4, 3), clusters, max_candidates=1)
+
+    assert len(selection.candidates) == 1
+    # the one that was capped off still counts as a frontier
+    assert (selection.clusters, selection.unreachable, selection.blacklisted) == (2, 0, 0)
+
+
+def test_no_goal_means_no_candidates():
+    clusters = clusters_of(CLOSED_ROOM_NEXT_TO_OPEN_ONE, min_size_m=0.25)
+
+    selection = goal_for(CLOSED_ROOM_NEXT_TO_OPEN_ONE, cell_to_xy(4, 5), clusters)
+
+    assert selection.goal is None and selection.candidates == []

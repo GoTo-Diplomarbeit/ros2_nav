@@ -47,7 +47,7 @@ run_in_docker "$@"   # on the host: start the container and run this script in i
 setup_run
 
 # The hooks of stop_on_exit in sim_common.sh
-before_stop() { stop_session "$EXPLORER_ID"; mapping_before_stop; }
+before_stop() { stop_session "$EXPLORER_ID"; stop_drift_monitor; mapping_before_stop; }
 after_stop() { mapping_after_stop "$1"; }
 
 # A continued map: the explorer waits (it was started paused) until RTAB-Map has found the robot
@@ -75,6 +75,7 @@ start_rtabmap "RTAB-Map + rviz + Nav2" use_nav2:=true localization:=$CONTINUE_MA
     rviz_config:=autonomous_mapping.rviz nav2_params:="$NAV2_PARAMS"
 EXPLORER_ID=$(start_in_background "$LOG_DIR/explorer.log" \
     ros2 run goto autonomous_mapping_node --ros-args -p start_paused:=$CONTINUE_MAP)
+start_drift_monitor
 if [[ "$CONTINUE_MAP" == true ]]; then
     echo "      looking for the robot on the map ..."
     watch_localization start_exploring_when_found &

@@ -30,6 +30,7 @@ SIM_ID=""
 RTABMAP_ID=""
 SLAM_NAME="RTAB-Map"
 WATCHER_ID=""
+DRIFT_ID=""
 
 # Programs of which only one copy may run - two would fight over /map and map->odom.
 # "^" = start of the command line, so e.g. an editor that has "gz sim" in its title doesn't match.
@@ -356,6 +357,23 @@ watch_localization() {
             echo "    If it doesn't, click \"2D Pose Estimate\" in rviz on its real position."
         fi
     done
+}
+
+# Starts the drift monitor (goto/mapping/drift_monitor.py): once per second it compares where SLAM and the odometry
+# think the robot is with where the simulator really has it. Files in the run's log folder: drift.csv and
+# drift_summary.txt. Only for the simulator. Sets DRIFT_ID.
+start_drift_monitor() {
+    DRIFT_ID=$(start_in_background "$LOG_DIR/drift.log" \
+        ros2 run goto drift_monitor --ros-args -p csv_path:="$LOG_DIR/drift.csv")
+}
+
+# Stops the drift monitor and shows its summary. Call it from before_stop, while SLAM still runs.
+stop_drift_monitor() {
+    stop_session "$DRIFT_ID" 5
+    [[ -s "$LOG_DIR/drift_summary.txt" ]] || return 0
+    echo
+    echo "Drift against the simulator's real position (every second in $LOG_DIR/drift.csv):"
+    sed 's/^/    /' "$LOG_DIR/drift_summary.txt"
 }
 
 # ---- Shared by build_run_sim_mapping.sh and build_run_sim_autonomous_mapping.sh ------------------------

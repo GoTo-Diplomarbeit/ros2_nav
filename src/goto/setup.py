@@ -38,6 +38,7 @@ setup(
             "autonomous_mapping_node = goto.mapping.autonomous_mapping_node:main",
             "autonomous_mapping_keys = goto.mapping.autonomous_mapping_keys:main",
             "scan_body_filter = goto.mapping.scan_body_filter:main",
+            "drift_monitor = goto.mapping.drift_monitor:main",
         ],
     },
 )
