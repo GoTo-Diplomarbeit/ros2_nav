@@ -96,7 +96,8 @@ esac
 
 # wait_for_rtabmap:=false - slam_toolbox sends no /info, which the explorer waits for with RTAB-Map
 EXPLORER_ID=$(start_in_background "$LOG_DIR/explorer.log" \
-    ros2 run goto autonomous_mapping_node --ros-args -p wait_for_rtabmap:=false)
+    ros2 run goto autonomous_mapping_node --ros-args -p wait_for_rtabmap:=false -p debug_dir:="$LOG_DIR" \
+        -p preferred_clearance_m:=0.6)
 start_drift_monitor
 
 echo "[3/3] Keys (below) - keep this window focused. x or Ctrl+C stops everything and saves the map."

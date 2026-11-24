@@ -55,14 +55,16 @@ def test_merge_files_writes_the_merged_yaml(tmp_path):
     assert result["node"]["ros__parameters"]["footprint"] == "[[0.38, 0.2], [-0.38, -0.2]]"  # still a string
 
 
-def test_the_exploration_overrides_touch_only_the_two_inflation_radii():
+def test_the_exploration_overrides_touch_only_the_inflation_radii_and_reversing():
     base = load("nav2_params.yaml")
     overrides = load("nav2_exploration_overrides.yaml")
 
     # The overrides name nothing but the two inflation radii (the radius value itself may be changed to experiment)
+    # and that the controller may reverse
     assert overrides == {
         "local_costmap": {"local_costmap": {"ros__parameters": {"inflation_layer": {"inflation_radius": ANY}}}},
         "global_costmap": {"global_costmap": {"ros__parameters": {"inflation_layer": {"inflation_radius": ANY}}}},
+        "controller_server": {"ros__parameters": {"FollowPath": {"allow_reversing": True}}},
     }
 
     merged = deep_merge(base, overrides)
@@ -76,7 +78,19 @@ def test_the_exploration_overrides_touch_only_the_two_inflation_radii():
         assert layer["cost_scaling_factor"] == 3.0
         # Everything else is the plain navigation file: put the radius back and nothing differs
         layer["inflation_radius"] = base[costmap][costmap]["ros__parameters"]["inflation_layer"]["inflation_radius"]
+    assert merged["controller_server"]["ros__parameters"]["FollowPath"]["allow_reversing"] is True
+    merged["controller_server"]["ros__parameters"]["FollowPath"]["allow_reversing"] = False
     assert merged == base
+
+
+def test_the_slam_settings_for_small_movements_and_stricter_loop_closure():
+    slam = load("slam_params.yaml")["slam_toolbox"]["ros__parameters"]
+
+    # Small steps: a creep the odometry misses is matched in pieces well inside the matcher's +-0.25 m window
+    assert slam["minimum_travel_distance"] <= 0.1
+    assert slam["minimum_travel_heading"] <= 0.2
+    # A loop closure moves the pose by at most half the loop search window: less than the 2 m of the wrong ones
+    assert slam["loop_search_space_dimension"] / 2 < 2.0
 
 
 def test_the_slam_exploration_overrides_touch_only_min_pass_through():

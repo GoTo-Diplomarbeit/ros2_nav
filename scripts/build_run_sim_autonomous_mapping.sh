@@ -19,10 +19,9 @@
 # rviz shows no OctoMap here (rviz/autonomous_mapping.rviz): RTAB-Map only builds the 3D map while something
 # subscribes to it, and building it froze RTAB-Map for up to a minute. Don't open rviz/rtabmap.rviz during this run.
 #
-# Wall distance: the explorer's robot_clearance_m, preferred_clearance_m and pullback_m (autonomous_mapping_node.py)
-# and the inflation radius for exploration (config/nav2_exploration_overrides.yaml) are at the plain values, the same
-# as before. Larger values (0.45 m clearance, 0.9 m inflation) keep the robot farther from walls but skip doors
-# under 0.9 m: drive through those by hand (i j l ,).
+# Wall distance: goals prefer cells 0.6 m from walls (preferred_clearance_m, a preference only: robot_clearance_m,
+# the hard minimum, stays 0.3 m, so doors are not skipped), and Nav2 plans with a 0.9 m inflation radius and may back
+# up (config/nav2_exploration_overrides.yaml). Both keep the robot out of tight spots between tables.
 #
 # Stop with x or Ctrl+C here - not with "docker compose down", RTAB-Map saves the map when it stops.
 
@@ -74,7 +73,8 @@ start_simulator
 start_rtabmap "RTAB-Map + rviz + Nav2" use_nav2:=true localization:=$CONTINUE_MAP \
     rviz_config:=autonomous_mapping.rviz nav2_params:="$NAV2_PARAMS"
 EXPLORER_ID=$(start_in_background "$LOG_DIR/explorer.log" \
-    ros2 run goto autonomous_mapping_node --ros-args -p start_paused:=$CONTINUE_MAP)
+    ros2 run goto autonomous_mapping_node --ros-args -p start_paused:=$CONTINUE_MAP -p debug_dir:="$LOG_DIR" \
+        -p preferred_clearance_m:=0.6)
 start_drift_monitor
 if [[ "$CONTINUE_MAP" == true ]]; then
     echo "      looking for the robot on the map ..."

@@ -16,11 +16,25 @@ slam_toolbox:
     # startup (a runtime "ros2 param set" is silently ignored - restart to apply).
     map_update_interval: 2.0
     max_laser_range: 8.0
-    minimum_travel_distance: 0.2
-    minimum_travel_heading: 0.2
+    # A scan is matched only after the ODOMETRY says the robot moved this far or turned this much. The legged robot's
+    # odometry misses slow creeping in tight spots (all feet down = zero speed), so with 0.2 nothing corrected a creep
+    # until it was bigger than the matcher's window (+-0.25 m, correlation_search_space_dimension 0.5). With small
+    # values the creep is corrected piece by piece. The scan rate is still limited by minimum_time_interval (0.5 s).
+    minimum_travel_distance: 0.05
+    minimum_travel_heading: 0.1
+    # Scans now come closer together: keep the same stretch of path in the matching buffer (default 10 at 0.5 m)
+    # and in the chain that loop closure ignores (default 10)
+    scan_buffer_size: 30
+    loop_match_minimum_chain_size: 30
     transform_timeout: 0.5
     distance_variance_penalty: 1.0
     angle_variance_penalty: 2.0
     do_loop_closing: true
+    # Stricter loop closure: in rooms that look alike (rows of tables) a wrong match moved the pose by about 2 m and left
+    # ghost walls that slam_toolbox never deletes. Real drift is far smaller, so a loop closure may move the pose by
+    # at most half of loop_search_space_dimension (default 8.0 m) and has to fit better (defaults 0.35 and 0.45).
+    loop_search_space_dimension: 3.0
+    loop_match_minimum_response_coarse: 0.5
+    loop_match_minimum_response_fine: 0.6
     min_pass_through: 3
     occupancy_threshold: 0.2
