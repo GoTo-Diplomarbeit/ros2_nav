@@ -33,6 +33,7 @@ setup(
             "vision_node = goto.vision.vision_node:main",
             "planner_node = goto.planner.planner_node:main",
             "web_server_node = goto.communication.server.web_server_node:main",
+            "hotspot_node = goto.communication.hotspot_node:main",
             "state_node = goto.state.state_node:main",
         ],
     },

@@ -92,6 +92,12 @@ def generate_launch_description():
                 output="screen",
             ),
             Node(
+                package="goto",
+                executable="hotspot_node",
+                name="hotspot",
+                output="screen",
+            ),
+            Node(
                 package="image_transport",
                 executable="republish",
                 name="image_republisher",

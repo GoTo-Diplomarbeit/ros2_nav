@@ -26,6 +26,8 @@ x-gui: &gui
     # gz-transport onto loopback (everything runs in this one container anyway)
     # fixes discovery without touching the host network.
     - GZ_IP=127.0.0.1
+    - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    - CYCLONEDDS_URI=file:///ws/cyclone.xml
   devices:
     - /dev/dri:/dev/dri
   stdin_open: true
@@ -41,6 +43,8 @@ x-nvidia: &nvidia
     - NVIDIA_DRIVER_CAPABILITIES=all
     # See x-gui: without this Gazebo's GUI can't discover the server on Arch
     - GZ_IP=127.0.0.1
+    - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    - CYCLONEDDS_URI=file:///ws/cyclone.xml
   gpus: all
 
 services:
@@ -67,6 +71,9 @@ services:
     network_mode: host
     volumes:
       - *ws
+    environment:
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=file:///ws/cyclone.xml
     stdin_open: true
     tty: true
     build:
