@@ -1,6 +1,6 @@
 """
 Autonomous Mapping Node - the robot maps the floor by itself: it drives to the edge of the known map
-(a frontier) again and again, until no frontier is left. RTAB-Map builds the map, Nav2 drives.
+(a frontier) again and again, until no frontier is left. slam_toolbox builds the map, Nav2 drives.
 
     /autonomous_mapping/command   (std_msgs/String) "pause", "resume" or "toggle". Pausing stops the robot,
                                   so it can be driven by hand (see autonomous_mapping_keys.py).
@@ -155,8 +155,9 @@ class AutonomousMappingNode(NodeWrapper):
             time_limit_s=node.declare_parameter("time_limit_s", 1800.0).value,
             done_checks=node.declare_parameter("done_checks", 3).value,
             start_paused=node.declare_parameter("start_paused", False).value,
-            # false with slam_toolbox: it sends no /info, so waiting for it would never end
-            wait_for_rtabmap=node.declare_parameter("wait_for_rtabmap", True).value,
+            # true only with RTAB-Map (build_run_sim_autonomous_mapping.sh): the explorer then waits while RTAB-Map is
+            # busy rebuilding its map. slam_toolbox sends no /info, so waiting for it would never end.
+            wait_for_rtabmap=node.declare_parameter("wait_for_rtabmap", False).value,
             # A folder: when the robot is cut off, the costmap around it is saved there (cut_off_<time>.npz)
             debug_dir=node.declare_parameter("debug_dir", "").value,
         )

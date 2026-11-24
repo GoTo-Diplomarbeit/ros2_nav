@@ -25,9 +25,10 @@ tilt_deg is how far the real robot is tipped over (the larger of roll and pitch,
 walking robot rocks by about 5 degrees, one that has fallen over is above 45. A fallen robot makes everything else
 wrong (its lidar sees the floor as walls), so the summary also says how long the robot spent tipped over.
 
-Why: slam_toolbox drifts and RTAB-Map doesn't, and the cause is not known. With the numbers one can see whether the
-error is in the heading or in the distance, whether it grows while turning on the spot, and whether SLAM corrects
-the odometry or makes it worse. Only works in the simulator (a real robot has no ground truth).
+Why: the SLAM pose can be wrong without anything showing in rviz (a wrong loop closure, a creep the odometry misses).
+With the numbers one can see whether the error is in the heading or in the distance, whether it grows while turning
+on the spot, and whether SLAM corrects the odometry or makes it worse. Only works in the simulator (a real robot has
+no ground truth).
 
 Limit: the real pose is the one of the robot's base link, the estimates are those of base_footprint. If the two are
 not at the same place in the robot's body, the error has a constant part that changes with the heading.

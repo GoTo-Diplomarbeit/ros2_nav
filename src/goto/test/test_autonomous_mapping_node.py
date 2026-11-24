@@ -266,6 +266,7 @@ def test_a_map_with_a_small_free_patch_and_no_frontier_is_not_done(explorer):
 
 
 def test_a_silent_rtabmap_stops_new_goals(explorer):
+    explorer._p.wait_for_rtabmap = True  # the RTAB-Map version (build_run_sim_autonomous_mapping.sh)
     give_map(explorer, room_grid(door=True))
     explorer._info_time = time.monotonic() - 60
 
@@ -276,8 +277,8 @@ def test_a_silent_rtabmap_stops_new_goals(explorer):
 
 
 def test_without_rtabmap_a_silent_info_topic_does_not_stop_the_explorer(explorer):
-    # slam_toolbox version: wait_for_rtabmap is false, so the missing /info is no reason to wait
-    explorer._p.wait_for_rtabmap = False
+    # slam_toolbox version (the default): wait_for_rtabmap is false, so the missing /info is no reason to wait
+    assert explorer._p.wait_for_rtabmap is False
     give_map(explorer, room_grid(door=True))
     explorer._info_time = time.monotonic() - 60
 
@@ -328,7 +329,6 @@ def test_a_late_abort_far_from_the_goal_counts_and_two_give_the_frontier_up(expl
 
 
 def test_arriving_at_a_frontier_that_is_still_there_after_the_new_map_marks_it_explored(explorer):
-    explorer._p.wait_for_rtabmap = False
     give_map(explorer, room_grid(door=True))
     explorer._explore(time.monotonic())
     goal = explorer._goal
@@ -343,7 +343,6 @@ def test_arriving_at_a_frontier_that_is_still_there_after_the_new_map_marks_it_e
 
 
 def test_arriving_at_a_frontier_that_is_gone_in_the_new_map_is_not_marked_explored(explorer):
-    explorer._p.wait_for_rtabmap = False
     give_map(explorer, room_grid(door=True))
     explorer._explore(time.monotonic())
     explorer._goal_handle, explorer._accepted_at = FakeHandle(), time.monotonic() - 30

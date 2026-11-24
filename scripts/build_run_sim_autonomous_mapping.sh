@@ -73,8 +73,8 @@ start_simulator
 start_rtabmap "RTAB-Map + rviz + Nav2" use_nav2:=true localization:=$CONTINUE_MAP \
     rviz_config:=autonomous_mapping.rviz nav2_params:="$NAV2_PARAMS"
 EXPLORER_ID=$(start_in_background "$LOG_DIR/explorer.log" \
-    ros2 run goto autonomous_mapping_node --ros-args -p start_paused:=$CONTINUE_MAP -p debug_dir:="$LOG_DIR" \
-        -p preferred_clearance_m:=0.6)
+    ros2 run goto autonomous_mapping_node --ros-args -p start_paused:=$CONTINUE_MAP -p wait_for_rtabmap:=true \
+        -p debug_dir:="$LOG_DIR" -p preferred_clearance_m:=0.6)
 start_drift_monitor
 if [[ "$CONTINUE_MAP" == true ]]; then
     echo "      looking for the robot on the map ..."
