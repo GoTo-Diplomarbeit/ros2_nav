@@ -33,6 +33,7 @@ import json
 import math
 import time
 from enum import Enum
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -40,6 +41,7 @@ from action_msgs.msg import GoalStatus
 from action_msgs.srv import CancelGoal
 from geometry_msgs.msg import Point
 from nav2_msgs.action import ComputePathToPose, NavigateToPose
+from nav2_msgs.srv import ClearEntireCostmap
 from nav_msgs.msg import OccupancyGrid, Odometry
 from rclpy.action import ActionClient
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
@@ -66,6 +68,11 @@ COMMAND_TOPIC = "/autonomous_mapping/command"
 STATUS_TOPIC = "/autonomous_mapping/status"
 MARKERS_TOPIC = "/autonomous_mapping/frontiers"
 COSTMAP_TOPIC = "/global_costmap/costmap"
+CLEAR_COSTMAP_SERVICES = (
+    "/global_costmap/clear_entirely_global_costmap",  # the one the explorer reads
+    "/local_costmap/clear_entirely_local_costmap",  # the one the controller drives on
+)
+DEBUG_CROP_M = 3.0  # how far around the robot the costmap is saved when the robot is cut off
 
 TICK_PERIOD_S = 1.0  # how often the explorer re-checks what to do
 STATUS_PERIOD_S = 2.0  # the status is repeated this often even if nothing changed
@@ -150,6 +157,8 @@ class AutonomousMappingNode(NodeWrapper):
             start_paused=node.declare_parameter("start_paused", False).value,
             # false with slam_toolbox: it sends no /info, so waiting for it would never end
             wait_for_rtabmap=node.declare_parameter("wait_for_rtabmap", True).value,
+            # A folder: when the robot is cut off, the costmap around it is saved there (cut_off_<time>.npz)
+            debug_dir=node.declare_parameter("debug_dir", "").value,
         )
 
         self._status_publisher = node.create_publisher(String, STATUS_TOPIC, STATUS_QOS)
@@ -171,6 +180,8 @@ class AutonomousMappingNode(NodeWrapper):
             node.create_client(CancelGoal, "/navigate_to_pose/_action/cancel_goal"),
             node.create_client(CancelGoal, "/follow_path/_action/cancel_goal"),
         ]
+        # Clearing Nav2's costmaps throws away stale live obstacles, the same as Nav2's own recovery does
+        self._clear_clients = [node.create_client(ClearEntireCostmap, name) for name in CLEAR_COSTMAP_SERVICES]
 
         # The costmap (called "map" below where it doesn't matter): _costmap as Nav2 sent it, _grid the same as
         # -1 / 0 / 100 for frontiers.py
@@ -419,6 +430,8 @@ class AutonomousMappingNode(NodeWrapper):
         if self._cut_off_since is None:
             self._cut_off_since = now
             self.node.get_logger().info(f"{count} frontiers can't be reached for now, waiting for the costmap")
+            self._report_cut_off()
+            self._clear_costmaps()
         if now - self._cut_off_since >= self._p.cut_off_wait_s:
             self.node.get_logger().warning(
                 f"{count} frontiers can't be reached for {self._p.cut_off_wait_s:.0f} s (behind a wall or a gap too "
@@ -426,6 +439,49 @@ class AutonomousMappingNode(NodeWrapper):
             )
             self._pause("stuck")
         return False
+
+    def _report_cut_off(self) -> None:
+        """Says where the robot stands in the costmap, so a robot stuck in the open can be explained afterwards."""
+        robot, selection = self._robot_xy(), self._selection
+        if robot is None or selection is None:
+            return
+        row, col = self._grid_info.to_cell(*robot)
+        inside = 0 <= row < self._costmap.shape[0] and 0 <= col < self._costmap.shape[1]
+        cost = int(self._costmap[row, col]) if inside else None
+        moved_m = None
+        if selection.start is not None:
+            moved_m = math.dist((row, col), selection.start) * self._grid_info.resolution
+        self.node.get_logger().info(
+            f"Cut off at ({robot[0]:.1f}, {robot[1]:.1f}): cost of the robot's cell {cost}, "
+            f"search started {'nowhere' if moved_m is None else f'{moved_m:.2f} m away'}, "
+            f"robot's region {selection.reachable_m2:.1f} m2"
+        )
+        if self._p.debug_dir and inside:
+            self._save_cut_off_crop(robot, row, col, selection)
+
+    def _save_cut_off_crop(self, robot, row: int, col: int, selection) -> None:
+        """Saves the costmap around the robot (numpy file) to look at it later, e.g. with imshow."""
+        cells = math.ceil(DEBUG_CROP_M / self._grid_info.resolution)
+        row_start, col_start = max(row - cells, 0), max(col - cells, 0)
+        crop = self._costmap[row_start : row + cells + 1, col_start : col + cells + 1]
+        name = Path(self._p.debug_dir) / f"cut_off_{time.strftime('%H-%M-%S')}.npz"
+        np.savez(
+            name,
+            costmap=crop,
+            crop_origin_cell=(row_start, col_start),  # cell of the crop's corner in the full costmap
+            robot_cell=(row, col),
+            start_cell=selection.start if selection.start is not None else (-1, -1),
+            robot_xy=robot,
+            resolution=self._grid_info.resolution,
+            origin_xy=(self._grid_info.origin_x, self._grid_info.origin_y),
+        )
+
+    def _clear_costmaps(self) -> None:
+        """Asks Nav2 to forget its live obstacles: a stale mark can wall in a robot standing in the open."""
+        self.node.get_logger().info("Clearing Nav2's costmaps")
+        for client in self._clear_clients:
+            if client.service_is_ready():
+                client.call_async(ClearEntireCostmap.Request())
 
     def _count_visit(self) -> None:
         """

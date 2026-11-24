@@ -168,6 +168,28 @@ def test_a_frontier_behind_a_wall_is_unreachable():
     assert (selection.clusters, selection.unreachable, selection.blacklisted) == (1, 1, 0)
 
 
+def test_the_selection_reports_where_the_search_started_and_how_big_the_robots_region_is():
+    clusters = clusters_of(CLOSED_ROOM_NEXT_TO_OPEN_ONE, min_size_m=0.25)
+    robot = cell_to_xy(4, 5)
+
+    selection = goal_for(CLOSED_ROOM_NEXT_TO_OPEN_ONE, robot, clusters)
+
+    assert selection.start == INFO.to_cell(*robot)  # the robot's own cell is passable: no moving
+    assert selection.reachable_m2 > 0.0
+
+
+def test_a_robot_in_a_blocked_cell_starts_its_search_at_the_nearest_passable_one():
+    grid = np.full((15, 15), 100, dtype=np.int8)
+    grid[1:14, 1:14] = 0  # a room of 1.3 m, large enough for cells 0.25 m from every wall
+    grid[7, 7] = 100  # a stray obstacle mark right where the robot stands
+    robot = cell_to_xy(7, 7)
+
+    selection = goal_for(grid, robot, [])
+
+    assert selection.start != INFO.to_cell(*robot)
+    assert selection.start is not None
+
+
 def test_a_blacklisted_frontier_is_skipped_and_counted():
     clusters = clusters_of(ROOM_WITH_TWO_DOORS, min_size_m=0.25)
     given_up = [cluster.centroid for cluster in clusters]

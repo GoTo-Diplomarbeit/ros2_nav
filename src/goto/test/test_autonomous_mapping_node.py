@@ -11,7 +11,7 @@ from nav_msgs.msg import OccupancyGrid, Path
 from std_msgs.msg import String
 
 from goto.mapping.autonomous_mapping_keys import AutonomousMappingKeysNode
-from goto.mapping.autonomous_mapping_node import AutonomousMappingNode
+from goto.mapping.autonomous_mapping_node import AutonomousMappingNode, Mode
 from goto.mapping.frontiers import GridInfo
 
 INFO = GridInfo(resolution=0.1, origin_x=0.0, origin_y=0.0)
@@ -644,6 +644,77 @@ def test_frontiers_that_stay_cut_off_end_as_stuck_not_done(explorer):
 
     assert explorer.status_text() == "stuck"
     assert explorer._cut_off_since is None  # the next resume starts the waiting again
+
+
+def fake_clear_clients(explorer):
+    clients = [FakeCancelClient(), FakeCancelClient()]  # same two methods as a service client: ready, call_async
+    explorer._clear_clients = clients
+    return clients
+
+
+def test_being_cut_off_clears_both_costmaps_once_per_wait(explorer):
+    clients = fake_clear_clients(explorer)
+    give_map(explorer, cut_off_room())
+
+    for _ in range(5):
+        explorer._explore(time.monotonic())
+
+    assert [client.calls for client in clients] == [1, 1]  # not again on every tick of the same wait
+
+
+def test_a_new_wait_clears_the_costmaps_again(explorer):
+    clients = fake_clear_clients(explorer)
+    give_map(explorer, cut_off_room())
+    explorer._explore(time.monotonic())
+
+    explorer._pause("stuck")  # a pause ends the wait
+    explorer._mode = Mode.WAITING
+    explorer._explore(time.monotonic())
+
+    assert [client.calls for client in clients] == [2, 2]
+
+
+def test_the_costmaps_are_not_cleared_when_nothing_is_cut_off(explorer):
+    clients = fake_clear_clients(explorer)
+    give_map(explorer, room_grid(door=True))
+
+    explorer._explore(time.monotonic())
+
+    assert [client.calls for client in clients] == [0, 0]
+
+
+def test_a_service_that_is_not_ready_is_skipped(explorer):
+    clients = fake_clear_clients(explorer)
+    clients[0].service_is_ready = lambda: False
+    give_map(explorer, cut_off_room())
+
+    explorer._explore(time.monotonic())
+
+    assert [client.calls for client in clients] == [0, 1]
+
+
+def test_being_cut_off_saves_the_costmap_around_the_robot(explorer, tmp_path):
+    fake_clear_clients(explorer)
+    explorer._p.debug_dir = str(tmp_path)
+    give_map(explorer, cut_off_room())
+
+    explorer._explore(time.monotonic())
+
+    [saved] = list(tmp_path.glob("cut_off_*.npz"))
+    data = np.load(saved)
+    assert set(data.files) >= {"costmap", "robot_cell", "start_cell", "crop_origin_cell", "resolution", "origin_xy"}
+    assert tuple(data["robot_cell"]) == INFO.to_cell(1.0, 1.5)
+    assert data["costmap"].shape[0] <= 61  # the robot's surroundings, not the whole costmap
+
+
+def test_without_a_debug_folder_nothing_is_saved(explorer, tmp_path, monkeypatch):
+    fake_clear_clients(explorer)
+    monkeypatch.chdir(tmp_path)  # a file written by mistake would land here
+    give_map(explorer, cut_off_room())
+
+    explorer._explore(time.monotonic())
+
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_the_costmap_opening_up_again_ends_the_waiting(explorer):

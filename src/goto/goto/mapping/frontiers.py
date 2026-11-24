@@ -82,6 +82,10 @@ class Selection:
     # The nearest few goals, nearest first, for a better check than "nearest in a straight line" (the planner's path
     # length). goal is the first of them.
     candidates: list[Goal] = field(default_factory=list)
+    # For finding out why the robot sees no way anywhere: where the search for the robot's region started (the robot's
+    # own cell if the robot may be there, else the nearest cell it may use; None = there is none) and how big it is
+    start: tuple[int, int] | None = None
+    reachable_m2: float = 0.0
 
 
 def _distance_to_m(occupied: np.ndarray, info: GridInfo) -> np.ndarray:
@@ -280,6 +284,7 @@ def choose_goal(
 
     regions, _ = ndimage.label(passable)  # 4-connected: the robot can't squeeze through a diagonal gap
     reachable = regions == regions[start]
+    reachable_m2 = float(np.count_nonzero(reachable)) * info.resolution**2
     # Where the robot can get next to: a frontier cell sits at the edge of the known space, a little off the cells the
     # robot's centre may use. A frontier behind a wall is much farther away than this.
     touch_cells = max(1, math.ceil(TOUCH_REACHABLE_M / info.resolution))
@@ -332,6 +337,8 @@ def choose_goal(
         unreachable=unreachable,
         blacklisted=blacklisted,
         candidates=candidates,
+        start=start,
+        reachable_m2=reachable_m2,
     )
 
 
