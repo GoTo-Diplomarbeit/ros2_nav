@@ -69,11 +69,16 @@ class Go2Backend(MovementBackend):
         self._sport_client.Init()
 
     def get_yaw(self) -> Optional[float]:
-        # TODO: Implement IMU Robot
         return None
 
     def send_tilt_command(self, angle: float) -> None:
-        # TODO: Implement Photo Pose Robot
+        code = self._sport_client.BalanceStand()
+        if code != 0:
+            print(f"Balance stand failed: {code}")
+            return None
+
+        else:
+            self._sport_client.Euler(0.0, 0.3, 0.0)
         return None
 
     def send_movement_command(self, movement_command: Twist) -> None:

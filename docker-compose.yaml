@@ -2,6 +2,9 @@ x-ws-volume: &ws .:/ws
 
 x-gui: &gui
   network_mode: host
+  privileged: true
+  security_opt:
+    - apparmor:unconfined
   volumes:
     - *ws
     - /tmp/.X11-unix:/tmp/.X11-unix
@@ -10,7 +13,9 @@ x-gui: &gui
     # and Gazebo falls back to CPU rendering. Read-only mount fixes this.
     - /sys:/sys:ro
     # photos taken by the vision node (saved to ~/go2_detections inside the container, which runs as root)
+    - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket
     - ${HOME}/go2_detections:/root/go2_detections
+    - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket
   environment:
     - DISPLAY=${DISPLAY}
     - XAUTHORITY=/tmp/.docker.xauth
