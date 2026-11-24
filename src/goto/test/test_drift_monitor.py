@@ -122,6 +122,6 @@ def test_the_node_starts_and_writes_the_csv_header(tmp_path):
     lines = (tmp_path / "run" / "drift.csv").read_text().splitlines()
     assert lines == [
         "time_s,travelled_m,slam_pos_err_m,slam_heading_err_deg,odom_pos_err_m,odom_heading_err_deg,tilt_deg,"
-        "real_x,real_y,slam_x,slam_y,odom_x,odom_y"
+        "real_x,real_y,slam_x,slam_y,odom_x,odom_y,real_yaw_deg,slam_yaw_deg,odom_yaw_deg,cmd_vx,cmd_wz"
     ]
     assert "No samples" in (tmp_path / "run" / "drift_summary.txt").read_text()

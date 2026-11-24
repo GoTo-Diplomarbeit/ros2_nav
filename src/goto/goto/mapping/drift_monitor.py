@@ -2,6 +2,7 @@
 Drift Monitor - measures how far the robot's estimated position is from where the simulator really has it.
 
     /odom/ground_truth   (nav_msgs/Odometry)  the robot's real pose in Gazebo, bridged by the simulator
+    /cmd_vel             (geometry_msgs/Twist) what Nav2 (or the keys) tells the robot to do
     TF map -> base_footprint                  the pose SLAM (RTAB-Map or slam_toolbox) believes
     TF odom -> base_footprint                 the pose of the odometry alone (what SLAM starts from)
 
@@ -15,6 +16,10 @@ The same line also has the three positions themselves, each in the simulator's f
 pose as described above): real_x, real_y, slam_x, slam_y, odom_x, odom_y. The errors only say THAT an estimate is off;
 the positions say which of the three moved. For example, a robot that wiggles in a tight spot moves in the simulator,
 and whether the odometry saw that, or SLAM, shows in how far each of the three moved in the same seconds.
+The last three columns are the three headings (real_yaw_deg, slam_yaw_deg, odom_yaw_deg), because wiggling is mostly
+turning: a robot that turns in place hardly changes its position. Before them come cmd_vx and cmd_wz, the latest
+command (m/s, rad/s) at the time of the sample: if the real robot creeps while the command is about zero, the gait is
+at fault; if it creeps while a command is given, the path Nav2 plans is.
 
 tilt_deg is how far the real robot is tipped over (the larger of roll and pitch, from the simulator's real pose): a
 walking robot rocks by about 5 degrees, one that has fallen over is above 45. A fallen robot makes everything else
@@ -33,6 +38,7 @@ import math
 import time
 from pathlib import Path
 
+from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
@@ -44,6 +50,7 @@ from goto.node_utils.node_wrapper import NodeWrapper
 SAMPLE_PERIOD_S = 1.0
 SUMMARY_PERIOD_S = 10.0  # the summary file is made new this often, so it exists even if the node is killed
 GROUND_TRUTH_TOPIC = "/odom/ground_truth"
+COMMAND_TOPIC = "/cmd_vel"
 CSV_HEADER = [
     "time_s",
     "travelled_m",
@@ -58,6 +65,11 @@ CSV_HEADER = [
     "slam_y",
     "odom_x",
     "odom_y",
+    "real_yaw_deg",
+    "slam_yaw_deg",
+    "odom_yaw_deg",
+    "cmd_vx",
+    "cmd_wz",
 ]
 TIPPED_DEG = 30.0  # above this the robot counts as tipped over
 
@@ -142,9 +154,11 @@ class DriftMonitorNode(NodeWrapper):
         self._summary_path = self._csv_path.with_name(self._csv_path.stem + "_summary.txt")
 
         node.create_subscription(Odometry, GROUND_TRUTH_TOPIC, self._on_ground_truth, qos_profile_sensor_data)
+        node.create_subscription(Twist, COMMAND_TOPIC, self._on_command, 10)
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, node)
 
+        self._command = (0.0, 0.0)  # the latest command: forward speed (m/s), turning speed (rad/s)
         self._real = None  # the latest real pose
         self._tilt_deg = 0.0  # how far the robot is tipped over (the latest)
         self._starts = None  # (real, slam, odom) at the first sample
@@ -167,6 +181,9 @@ class DriftMonitorNode(NodeWrapper):
         q = pose.orientation
         self._real = (pose.position.x, pose.position.y, yaw_of(q.x, q.y, q.z, q.w))
         self._tilt_deg = tilt_of(q.x, q.y, q.z, q.w)
+
+    def _on_command(self, message: Twist) -> None:
+        self._command = (message.linear.x, message.angular.z)
 
     def _lookup(self, parent: str) -> Pose | None:
         """The latest pose of base_footprint in the given frame, None if TF doesn't have it (yet)."""
@@ -207,6 +224,11 @@ class DriftMonitorNode(NodeWrapper):
             round(slam_aligned[1], 3),
             round(odom_aligned[0], 3),
             round(odom_aligned[1], 3),
+            round(math.degrees(real[2]), 1),
+            round(math.degrees(slam_aligned[2]), 1),
+            round(math.degrees(odom_aligned[2]), 1),
+            round(self._command[0], 3),
+            round(self._command[1], 3),
         ]
         self._rows.append(row)
         self._csv.writerow(row)
