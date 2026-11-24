@@ -87,7 +87,7 @@ def test_summary_gives_the_error_per_10_m_driven():
     assert "heading error at the end -8.0 deg (largest 8.0 deg)" in text
     assert "odom: position error at the end 4.00 m (largest 4.00 m, 2.00 m per 10 m driven)" in text
     assert "tilt: largest 6 deg, tipped over (more than 30 deg) in 0 of 2 samples" in text
-    assert "FELL OVER" not in text
+    assert "fell over" not in text
 
 
 def test_the_summary_says_when_the_robot_fell_over():
@@ -99,7 +99,7 @@ def test_the_summary_says_when_the_robot_fell_over():
 
     text = summarize(rows)
 
-    assert "tilt: largest 88 deg, tipped over (more than 30 deg) in 2 of 3 samples - THE ROBOT FELL OVER" in text
+    assert "tilt: largest 88 deg, tipped over (more than 30 deg) in 2 of 3 samples - the robot fell over" in text
 
 
 def test_the_tilt_of_a_quaternion_is_its_largest_roll_or_pitch():

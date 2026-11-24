@@ -16,7 +16,7 @@ slam_toolbox:
     # startup (a runtime "ros2 param set" is silently ignored - restart to apply).
     map_update_interval: 2.0
     max_laser_range: 8.0
-    # A scan is matched only after the ODOMETRY says the robot moved this far or turned this much. The legged robot's
+    # A scan is matched only after the odometry says the robot moved this far or turned this much. The legged robot's
     # odometry misses slow creeping in tight spots (all feet down = zero speed), so with 0.2 nothing corrected a creep
     # until it was bigger than the matcher's window (+-0.25 m, correlation_search_space_dimension 0.5). With small
     # values the creep is corrected piece by piece. The scan rate is still limited by minimum_time_interval (0.5 s).

@@ -13,7 +13,7 @@ csv file, and a summary is written next to it (and printed when the node stops):
     time_s, travelled_m, slam_pos_err_m, slam_heading_err_deg, odom_pos_err_m, odom_heading_err_deg, tilt_deg
 
 The same line also has the three positions themselves, each in the simulator's frame (the estimates laid over the real
-pose as described above): real_x, real_y, slam_x, slam_y, odom_x, odom_y. The errors only say THAT an estimate is off;
+pose as described above): real_x, real_y, slam_x, slam_y, odom_x, odom_y. The errors only say that an estimate is off;
 the positions say which of the three moved. For example, a robot that wiggles in a tight spot moves in the simulator,
 and whether the odometry saw that, or SLAM, shows in how far each of the three moved in the same seconds.
 The last three columns are the three headings (real_yaw_deg, slam_yaw_deg, odom_yaw_deg), because wiggling is mostly
@@ -138,7 +138,7 @@ def summarize(rows: list[list[float]]) -> str:
         tipped = sum(1 for tilt in tilts if tilt > TIPPED_DEG)
         lines.append(
             f"tilt: largest {max(tilts):.0f} deg, tipped over (more than {TIPPED_DEG:.0f} deg) in {tipped} of "
-            f"{len(tilts)} samples" + (" - THE ROBOT FELL OVER" if tipped else "")
+            f"{len(tilts)} samples" + (" - the robot fell over" if tipped else "")
         )
     return "\n".join(lines)
 
