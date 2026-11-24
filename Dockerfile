@@ -8,6 +8,9 @@ RUN apt-get update && rosdep update
 # -- Install nmcli to control the hotspot of the host
 RUN apt-get update && apt-get install -y network-manager
 
+# -- Install the CycloneDDS RMW for ROS 2
+RUN apt-get install -y ros-jazzy-rmw-cyclonedds-cpp
+
 # ----------------------------------------
 # | Install the required python packages |
 # ----------------------------------------

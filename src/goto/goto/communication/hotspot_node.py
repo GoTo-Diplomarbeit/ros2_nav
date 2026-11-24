@@ -1,11 +1,9 @@
+from rclpy.service import SrvTypeRequest, SrvTypeResponse
 from std_srvs.srv import SetBool
 
 from goto.communication import hotspot_backend
 from goto.node_utils import node_runner
 from goto.node_utils.node_wrapper import NodeWrapper
-
-# TODO (distance, later): Re-add "from std_msgs.msg import Float32" once the
-#   distance measurement is implemented.
 
 
 class HotspotNode(NodeWrapper):
@@ -13,30 +11,43 @@ class HotspotNode(NodeWrapper):
         super().__init__("hotspot_node", self._setup_channels)
 
     def _setup_channels(self) -> None:
-        self.node.create_service(SetBool, "hotspot/enable", self._on_enable)
+        self.node.create_service(SetBool, "hotspot/enable", self._set_hotspot_state)
         self.node.get_logger().info("Hotspot service ready")
+
         # TODO (distance, later): Create the Float32 publisher and the timer here.
 
-    def _on_enable(self, request, response):
-        # TODO (optional): Check whether the hotspot is already in the requested
-        #   state (hotspot_backend.hotspot_active()) and do nothing if so.
-        # TODO (optional): Only allow switching in certain mission states
-        #   (self.is_active()) if required. Currently the service works in every state.
+    def _set_hotspot_state(self, hotspot_state: SrvTypeRequest, response: SrvTypeResponse) -> SrvTypeResponse:
+        # Check if hotspot already in requested state
+        if hotspot_state.data == hotspot_backend.hotspot_active():
+            response.success = True
+            response.message = "ok"
+
         try:
-            if request.data:
+            # Enable on true, disable on false
+            if hotspot_state.data:
                 hotspot_backend.hotspot_start()
             else:
                 hotspot_backend.hotspot_stop()
+
+            # Return ok
             response.success = True
             response.message = "ok"
         except Exception as e:
+            # Log on error
             self.node.get_logger().error(f"Hotspot error: {e}")
+
+            # Return the error message
             response.success = False
             response.message = str(e)
         return response
 
-    # TODO (optional): Override destroy_node() and call hotspot_stop() there if the
-    #   hotspot should be switched off when the node shuts down.
+    def destroy_node(self) -> None:
+        # Disable the hotspot when node gets destroyed
+        hotspot_response: SetBool = SetBool()
+        self._set_hotspot_state(hotspot_state=False, response=hotspot_response)
+
+        # Destroy the node
+        self.node.destroy_node()
 
 
 def main():
