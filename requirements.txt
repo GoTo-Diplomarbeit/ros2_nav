@@ -19,6 +19,9 @@ opencv-python<4.12
 # Frontier search of the autonomous mapping (goto/mapping/frontiers.py)
 scipy
 
+# Room naming tool: the window where rooms are clicked on the map (goto/rooms/define_rooms.py)
+matplotlib
+
 # Real-robot backend (Go2Backend). Imported lazily, so the simulator does not need it.
 # Building cyclonedds needs the CycloneDDS that ROS 2 ships: source ROS before installing.
 unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git
