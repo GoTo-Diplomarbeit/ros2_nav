@@ -1,0 +1,33 @@
+# Nav2 settings that differ while the robot explores on its own (the autonomous mapping scripts).
+# They are merged into nav2_params.yaml at launch (goto/node_utils/merge_params.py); navigation and guiding keep
+# the plain nav2_params.yaml. Only list what differs.
+
+# Why: between rows of tables the controller kept refusing to drive ("detected collision ahead", then Nav2's
+# recoveries: spin and back up), and the recoveries are the wiggling that the odometry doesn't register.
+
+# The inflation radius. With 0.45 (nav2_params.yaml) the cost drops to zero beyond 0.45 m, so the planner has no
+# reason to stay farther from a wall or a table leg than that and cuts corners right at the edge, where the
+# 0.76 x 0.4 m footprint (corner radius 0.43 m) swings into the inflation zone. With 0.9 m the cost falls off smoothly
+# (about 119 at 0.45 m, 56 at 0.7 m, 31 at 0.9 m) and paths prefer the middle of a gap. Inflation only adds cost: a
+# gap wide enough for the robot stays passable.
+#
+# cost_scaling_factor is not listed on purpose: if you change it, also set the RPP controller's own
+# inflation_cost_scaling_factor (default 3.0) to the same value, otherwise its slow-down near obstacles is wrong.
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      inflation_layer:
+        inflation_radius: 0.9
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      inflation_layer:
+        inflation_radius: 0.9
+
+# The controller may back up. Without it the robot can only turn on the spot when the path ahead is blocked, and that
+# turning is what wiggles it.
+controller_server:
+  ros__parameters:
+    FollowPath:
+      allow_reversing: true

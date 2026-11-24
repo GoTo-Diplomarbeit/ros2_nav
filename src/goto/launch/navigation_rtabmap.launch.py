@@ -1,7 +1,7 @@
 """
 Mapping and navigation with RTAB-Map - the alternative to navigation.launch.py (slam_toolbox).
 
-  navigation.launch.py          Velodyne -> pointcloud_to_laserscan -> /scan -> slam_toolbox -> 2D /map
+  navigation.launch.py          Velodyne -> /scan (without the robot's legs) -> slam_toolbox -> 2D /map
   navigation_rtabmap.launch.py  Velodyne -> RTAB-Map -> 3D map (OctoMap) + 2D /map for Nav2
 
 Nav2 needs no changes: RTAB-Map publishes the same /map and map -> odom transform as slam_toolbox.
@@ -31,7 +31,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -83,6 +83,20 @@ def generate_launch_description():
         "Launch the simulator with rviz:=false so there is only one window.",
     )
 
+    rviz_config_argument = DeclareLaunchArgument(
+        "rviz_config",
+        default_value="rtabmap.rviz",
+        description="The rviz config in rviz/. rtabmap.rviz shows the OctoMap; autonomous_mapping.rviz doesn't, "
+        "which spares RTAB-Map the OctoMap: it only builds the map outputs somebody subscribes to.",
+    )
+
+    nav2_params_argument = DeclareLaunchArgument(
+        "nav2_params",
+        default_value=nav2_parameters_file,
+        description="The Nav2 parameter file. The autonomous mapping script passes a copy with a few exploration "
+        "settings on top (config/nav2_exploration_overrides.yaml); everything else uses the plain nav2_params.yaml.",
+    )
+
     # --delete_db_on_start is a command line flag, not a ROS parameter. Never delete in localization
     # mode - that would leave nothing to localize on.
     delete_database_flag = PythonExpression(
@@ -123,7 +137,7 @@ def generate_launch_description():
     pointcloud_to_laserscan_node = Node(
         package="pointcloud_to_laserscan",
         executable="pointcloud_to_laserscan_node",
-        remappings=[("cloud_in", "/velodyne_points/points"), ("scan", "/scan")],
+        remappings=[("cloud_in", "/velodyne_points/points"), ("scan", "/scan_raw")],
         parameters=[
             {
                 "target_frame": "base_footprint",
@@ -135,6 +149,11 @@ def generate_launch_description():
             simulation_time_parameter,
         ],
         condition=IfCondition(LaunchConfiguration("use_nav2")),
+    )
+
+    # /scan_raw -> /scan without the robot's own legs (they made the collision monitor block the robot)
+    scan_body_filter_node = Node(
+        package="goto", executable="scan_body_filter", condition=IfCondition(LaunchConfiguration("use_nav2"))
     )
 
     # RTAB-Map's own viewer (off by default), with the same parameter file for the same frames and inputs
@@ -155,7 +174,7 @@ def generate_launch_description():
         package="rviz2",
         executable="rviz2",
         name="rviz2",
-        arguments=["-d", os.path.join(goto_share_directory, "rviz", "rtabmap.rviz")],
+        arguments=["-d", PathJoinSubstitution([goto_share_directory, "rviz", LaunchConfiguration("rviz_config")])],
         parameters=[simulation_time_parameter],
         condition=IfCondition(LaunchConfiguration("rviz")),
     )
@@ -164,7 +183,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(get_package_share_directory("nav2_bringup"), "launch", "navigation_launch.py")
         ),
-        launch_arguments={"use_sim_time": "true", "params_file": nav2_parameters_file}.items(),
+        launch_arguments={"use_sim_time": "true", "params_file": LaunchConfiguration("nav2_params")}.items(),
         condition=IfCondition(LaunchConfiguration("use_nav2")),
     )
 
@@ -176,8 +195,11 @@ def generate_launch_description():
             use_navigation_argument,
             use_viewer_argument,
             use_rviz_argument,
+            rviz_config_argument,
+            nav2_params_argument,
             rtabmap_node,
             pointcloud_to_laserscan_node,
+            scan_body_filter_node,
             rtabmap_viewer_node,
             rviz_node,
             navigation_launch,

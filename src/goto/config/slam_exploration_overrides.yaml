@@ -1,0 +1,9 @@
+# slam_toolbox settings while exploring on its own (scripts/build_run_sim_autonomous_mapping_slam_toolbox.sh).
+# Merged into slam_params.yaml at launch (goto/node_utils/merge_params.py); bringup.launch.py keeps the plain file.
+
+slam_toolbox:
+  ros__parameters:
+    # A cell only becomes free after more than this many laser beams passed through it. With 3 the very first
+    # scan marks only the ~1 m around the robot as free: the explorer finds no frontier there, says "done" and the
+    # robot never moves, so slam_toolbox never gets a second scan. With 1 the first scan gives about 10 m2.
+    min_pass_through: 1

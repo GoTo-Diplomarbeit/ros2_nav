@@ -64,6 +64,42 @@ One map per world is saved in `maps/<world>.db` (gitignored) and continued on th
 At the end of each run the 2D map is also saved as `maps/<world>.png` + `maps/<world>.yaml` (for the app).
 Stop with Ctrl+C in the script's terminal, not with `docker compose down`, otherwise the map may not be saved.
 
+### Map a world on its own (slam_toolbox, autonomous)
+
+```shell
+bash scripts/build_run_sim_autonomous_mapping_slam_toolbox.sh [world]
+```
+
+The robot explores the floor by itself: it drives to the edge of the known map (a "frontier") again and again,
+until none is left. slam_toolbox builds the map, Nav2 drives, `autonomous_mapping_node` chooses where to go. Worlds:
+`default`, `school_floor` (a floor with corridors, classrooms and tables). `GUI=false` starts Gazebo without its
+window (less CPU).
+
+Keys in the script's terminal (you can take over at any time):
+
+| Key | Does |
+|---|---|
+| `p` | pause / resume exploring |
+| `i` `j` `l` `,` | drive by hand (pauses exploring first) |
+| `k` | stop moving |
+| `x` or Ctrl+C | stop and save the map |
+
+The robot stops and waits when no frontier is left (`done`), when frontiers are left that it can't reach (`stuck`),
+or after 30 minutes (`time_limit`). Then press `x` to save, or drive to a missed area by hand and press `p` to
+continue.
+
+Result in `maps/` (always a new map; an older one is moved to `<world>_slam_toolbox_old_<date>.*`):
+`<world>_slam_toolbox.png` + `.yaml` is the 2D map, `.posegraph` + `.data` is slam_toolbox's own file. Logs are in
+`log/sim_runs/<date>/`: `explorer.log` (what the explorer did), `drift.csv` + `drift_summary.txt` (how far the SLAM
+pose was from the real one in the simulator) and `cut_off_*.npz` (the costmap around the robot whenever it was
+cut off from all frontiers).
+
+While exploring the robot drives backwards when the path leads behind it, and Nav2 uses a wider safety margin around
+walls (`config/nav2_exploration_overrides.yaml`). Normal navigation keeps the plain `config/nav2_params.yaml`.
+
+`scripts/build_run_sim_autonomous_mapping.sh` is the same with RTAB-Map. It is not maintained any more and not
+tested with the latest changes.
+
 ### Navigate on a saved map (RTAB-Map + Nav2)
 
 ```shell
